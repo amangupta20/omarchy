@@ -1,6 +1,11 @@
 //* ---- 💫 https://github.com/JaKooLit 💫 ---- *//
 /* Waybar Modules - Custom Modules */
-/* Basically created to reduce the lines in Waybar Modules bank */
+// "custom/keyboard": {
+//	"exec": "cat $HOME/.cache/kb_layout 2>/dev/null || echo 'us'",
+//	"interval": 1,
+//	"format": " {}",
+//	"on-click": "$HOME/.config/hypr/scripts/SwitchKeyboardLayout.sh",
+// },ically created to reduce the lines in Waybar Modules bank */
 /* NOTE: This is only for Custom Modules */
 /* Custom Modules like weather browser, tty, file manager at the beginning */
 
@@ -89,7 +94,7 @@
 },
 
 "custom/keyboard": {
-	"exec": "cat $HOME/.cache/kb_layout",
+	"exec": "cat $HOME/.cache/kb_layout 2>/dev/null || echo 'us'",
 	"interval": 1,
 	"format": " {}",
 	"on-click": "$HOME/.config/hypr/scripts/SwitchKeyboardLayout.sh",

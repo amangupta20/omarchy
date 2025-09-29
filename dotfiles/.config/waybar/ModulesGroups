@@ -89,9 +89,20 @@
         },
 	"modules": [
 		"custom/power",
-		"custom/lock",
-		"keyboard-state",
-		"custom/keyboard",
+		"custom/lock"
+	]
+},
+
+"group/status_clean": {
+	"orientation": "inherit",
+	"drawer": {
+		"transition-duration": 500,
+		"children-class": "custom/power",
+		"transition-left-to-right": false
+        },
+	"modules": [
+		"custom/power",
+		"custom/lock"
 	]
 },
 "group/notify": {

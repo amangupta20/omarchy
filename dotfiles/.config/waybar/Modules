@@ -1,7 +1,13 @@
 //* ---- 💫 https://github.com/JaKooLit 💫 ---- *//
 /* Waybar Modules */
 
-/* NOTE: hyprland-workspaces, Custom Modules, Custom Vertical & Groups on a separate files */
+/* NOTE: hyprland-works"bluetooth#blueberry": {
+  "format": "",
+  "format-disabled": "󰂲",
+  "format-connected": "",
+  "tooltip-format": "Devices connected: {num_connections}",
+  "on-click": "env XDG_CURRENT_DESKTOP=GNOME blueberry"
+},Custom Modules, Custom Vertical & Groups on a separate files */
 
 {
 
@@ -93,6 +99,14 @@
 	"tooltip-format-enumerate-connected": " {device_alias} 󰂄{device_battery_percentage}%",
 	"tooltip": true,
 	"on-click": "blueman-manager",
+},
+
+"bluetooth#blueberry": {
+  "format": "",
+  "format-disabled": "󰂲",
+  "format-connected": "",
+  "tooltip-format": "Devices connected: {num_connections}",
+  "on-click": "XDG_CURRENT_DESKTOP=Hyprland blueberry"
 },
 
 "clock": {
@@ -403,5 +417,17 @@
 		"kitty",
     "kitty-dropterm"
 		],
+},
+
+"pulseaudio#wiremix": {
+  "format": "{icon}",
+  "on-click": "$TERMINAL --class=Wiremix -e wiremix",
+  "on-click-right": "pamixer -t",
+  "tooltip-format": "Playing at {volume}%",
+  "scroll-step": 5,
+  "format-muted": "",
+  "format-icons": {
+    "default": ["", "", ""]
+  }
 },
 }

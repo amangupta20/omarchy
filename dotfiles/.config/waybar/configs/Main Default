@@ -46,14 +46,15 @@
 	
 	"modules-right": [
 		"tray",
+		"bluetooth#blueberry",
 		"network#speed",
 		"custom/separator#dot-line",
 		"group/laptop",
 		"custom/separator#dot-line",
 		"group/mobo_drawer",
 		"custom/separator#line",  
-		"group/audio",
+		"pulseaudio#wiremix",
 		"custom/separator#dot-line", 
-		"group/status",
+		"group/status_clean",
 		],
 	}
