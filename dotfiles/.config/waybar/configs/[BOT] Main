@@ -1,6 +1,7 @@
 /* ---- 💫 https://github.com/JaKooLit 💫 ---- */
 // Custom Laptop - Bottom //
 {
+	"reload_style_on_change": true,
 	"include": [
 	  "$HOME/.config/waybar/Modules",
 	  "$HOME/.config/waybar/ModulesWorkspaces",
@@ -21,6 +22,8 @@
 	"margin-right": 8,
 	
 	"modules-left": [
+		"custom/screenrecording-indicator",
+		"custom/separator#blank",
 		"custom/separator#blank",
 		"custom/cava_mviz",
 		"custom/separator#blank",
@@ -39,8 +42,6 @@
 		"custom/separator#dot-line",
 		"custom/power_profiles",
 		"custom/power",
-		"custom/separator#dot-line",
-		"custom/weather",
 		"custom/separator#dot-line",
 		"idle_inhibitor",
 		],
