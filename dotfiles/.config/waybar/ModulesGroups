@@ -93,6 +93,20 @@
 	]
 },
 
+"group/status_with_profiles": {
+	"orientation": "inherit",
+	"drawer": {
+		"transition-duration": 500,
+		"children-class": "custom/power_profiles",
+		"transition-left-to-right": false
+        },
+	"modules": [
+		"custom/power_profiles",
+		"custom/power",
+		"custom/lock"
+	]
+},
+
 "group/status_clean": {
 	"orientation": "inherit",
 	"drawer": {

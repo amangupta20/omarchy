@@ -1,6 +1,5 @@
 /* ---- 💫 https://github.com/JaKooLit 💫 ---- */
-
-// ### DEFAULT Laptop  - Bottom ### //
+// Custom Laptop - Bottom //
 {
 	"include": [
 	  "$HOME/.config/waybar/Modules",
@@ -31,17 +30,19 @@
 		],
 	
 	"modules-center": [
-		"group/app_drawer",
-		"custom/separator#blank",
+		"custom/omarchy",
+		"custom/separator#dot-line",
 		"group/notify",
 		"custom/separator#dot-line",
 		"hyprland/workspaces#rw",
 		"clock",
 		"custom/separator#dot-line",
+		"custom/power_profiles",
+		"custom/power",
+		"custom/separator#dot-line",
 		"custom/weather",
 		"custom/separator#dot-line",
-		"idle_inhibitor",	
-		"custom/hint",	
+		"idle_inhibitor",
 		],
 	
 	"modules-right": [
@@ -53,8 +54,9 @@
 		"custom/separator#dot-line",
 		"group/mobo_drawer",
 		"custom/separator#line",  
-		"pulseaudio#wiremix",
-		"custom/separator#dot-line", 
-		"group/status",
+		"pulseaudio#wiremix", 
+		"custom/separator#dot-line",
+
 		],
 	}
+	

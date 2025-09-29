@@ -141,10 +141,16 @@
     
 "custom/power": {
 	"format": " ⏻ ",
-	"on-click": "$HOME/.config/hypr/scripts/Wlogout.sh",
-	"on-click-right": "$HOME/.config/hypr/scripts/ChangeBlur.sh",
+	"on-click": "echo -e 'Shutdown\nReboot\nLogout\nSleep' | rofi -dmenu -p 'Power Options' | xargs -I {} sh -c 'case {} in Shutdown) systemctl poweroff;; Reboot) systemctl reboot;; Logout) hyprctl dispatch exit;; Sleep) systemctl suspend;; esac'",
 	"tooltip": true,
-	"tooltip-format": "Left Click: Logout Menu\nRight Click: Change Blur",
+	"tooltip-format": "Power Menu",
+},
+
+"custom/power_profiles": {
+	"format": "󰌪",
+	"on-click": "omarchy-menu power",
+	"tooltip": true,
+	"tooltip-format": "Power Profiles",
 },
 
 "custom/reboot": {
@@ -272,5 +278,10 @@
 "custom/arrow10": {
 	"format": "",
 	"tooltip": false
-}
+},
+"custom/omarchy": {
+    "format": "<span font='omarchy'>\ue900</span>",
+    "on-click": "omarchy-menu",
+    "tooltip-format": "Omarchy Menu\n\nSuper + Alt + Space"
+  }
 }
