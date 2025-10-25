@@ -7,3 +7,8 @@ source ~/.local/share/omarchy/default/bash/rc
 # Make an alias for invoking commands you use constantly
 # alias p='python'
 alias stower="stow --dir=$HOME/.local/share/omarchy/dotfiles --target=$HOME"
+
+# Added by LM Studio CLI (lms)
+export PATH="$PATH:/home/aman/.lmstudio/bin"
+# End of LM Studio CLI section
+
