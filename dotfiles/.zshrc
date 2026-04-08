@@ -38,6 +38,7 @@ alias lt='eza --tree --level=2 --long --icons --git'
 alias lta='lt -a'
 alias ff="fzf --preview 'bat --style=numbers --color=always {}'"
 alias cd="zd"
+# alias swww="awww" # Removed since scripts now natively use awww
 # Add this to your ~/.zshrc file
 podman() {
   # Check if the first two arguments are "tag" and "-rm"

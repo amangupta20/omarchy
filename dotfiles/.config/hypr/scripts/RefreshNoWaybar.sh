@@ -32,7 +32,7 @@ done
 #pkill qs && qs &
 
 # Wallust refresh
-${SCRIPTSDIR}/WallustSwww.sh &
+${SCRIPTSDIR}/WallustAwww.sh &
 
 # reload swaync
 swaync-client --reload-config
