@@ -151,6 +151,9 @@ modify_startup_config() {
 
     sed -i '/^\s*exec-once\s*=\s*mpvpaper\s*.*$/s/^/\#/' "$startup_config"
 
+    # Persist wallpaper path for restore on reboot
+    echo "$selected_file" > "$HOME/.cache/awww_last_wallpaper"
+
     echo "Configured for static wallpaper (image)."
   fi
 }
