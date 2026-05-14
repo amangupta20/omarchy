@@ -10,6 +10,15 @@ SCRIPTSDIR="$HOME/.config/hypr/scripts"
 focused_monitor=$(hyprctl monitors -j | jq -r '.[] | select(.focused) | .name')
 rofi_theme="$HOME/.config/rofi/config-wallpaper-effect.rasi"
 
+# Sync .wallpaper_current from awww's actual current wallpaper
+awww_cache="$HOME/.cache/awww_last_wallpaper"
+if [[ -f $awww_cache ]]; then
+  awww_path=$(cat "$awww_cache")
+  if [[ -n $awww_path && -f $awww_path ]]; then
+    cp "$awww_path" "$wallpaper_current"
+  fi
+fi
+
 # Directory for swaync
 iDIR="$HOME/.config/swaync/images"
 iDIRi="$HOME/.config/swaync/icons"
