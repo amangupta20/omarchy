@@ -6,9 +6,14 @@ source ~/.local/share/omarchy/default/bash/rc
 #
 # Make an alias for invoking commands you use constantly
 # alias p='python'
-alias stower="stow --dir=$HOME/.local/share/omarchy/dotfiles --target=$HOME"
+alias recover="$HOME/.local/share/omarchy/personal/recover.sh"
+alias stower="recover --link"
 
 # Added by LM Studio CLI (lms)
-export PATH="$PATH:/home/aman/.lmstudio/bin"
+export PATH="$PATH:$HOME/.lmstudio/bin"
 # End of LM Studio CLI section
 
+
+
+# Added by Antigravity CLI installer
+export PATH="$HOME/.local/bin:$PATH"

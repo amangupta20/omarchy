@@ -1,0 +1,5 @@
+# Copy this file to ~/.config/omarchy/private-shell.zsh and add credentials or
+# machine-local environment variables there. Never commit the resulting file.
+
+# export ANTHROPIC_BASE_URL="https://example.invalid/api/anthropic"
+# export ANTHROPIC_AUTH_TOKEN="replace-me"

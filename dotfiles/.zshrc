@@ -31,7 +31,8 @@ pokemon-colorscripts --no-title -s -r | fastfetch -c $HOME/.config/fastfetch/con
 #alias la='ls -a'
 #alias lla='ls -la'
 #alias lt='ls --tree'
-alias stower="stow --dir=$HOME/.local/share/omarchy/dotfiles --target=$HOME"
+alias recover="$HOME/.local/share/omarchy/personal/recover.sh"
+alias stower="recover --link"
 alias ls='eza -lh --group-directories-first --icons=auto'
 alias lsa='ls -a'
 alias lt='eza --tree --level=2 --long --icons --git'
@@ -60,9 +61,10 @@ zd() {
   fi
 }
 # Added by LM Studio CLI (lms)
-export PATH="$PATH:/home/aman/.lmstudio/bin"
-export ANTHROPIC_BASE_URL=https://api.z.ai/api/anthropic
-export ANTHROPIC_AUTH_TOKEN=e7b44216c05c4cb1aa2f0282d419d9eb.NAzpMhUeN4teDcMo
+export PATH="$PATH:$HOME/.lmstudio/bin"
+
+# Keep credentials outside Git. This file is intentionally optional.
+[[ -r "$HOME/.config/omarchy/private-shell.zsh" ]] && source "$HOME/.config/omarchy/private-shell.zsh"
 
 # Set-up FZF key bindings (CTRL R for fuzzy history finder)
 source <(fzf --zsh)
@@ -80,3 +82,14 @@ export SDKMAN_DIR="$HOME/.sdkman"
 [ -s "$HOME/.config/envman/load.sh" ] && source "$HOME/.config/envman/load.sh"
 
 [[ "$TERM_PROGRAM" == "kiro" ]] && . "$(kiro --locate-shell-integration-path zsh)"
+
+
+# Added by Antigravity CLI installer
+export PATH="$HOME/.local/bin:$PATH"
+
+# bun completions
+[ -s "$HOME/.bun/_bun" ] && source "$HOME/.bun/_bun"
+
+# bun
+export BUN_INSTALL="$HOME/.bun"
+export PATH="$BUN_INSTALL/bin:$PATH"

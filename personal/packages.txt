@@ -1,0 +1,14 @@
+# Packages needed by the personal dotfiles in this fork but not guaranteed by
+# a stock Omarchy installation. omarchy-pkg-add supports both repository and
+# AUR packages.
+awww
+network-manager-applet
+nwg-displays
+ollama
+pokemon-colorscripts-git
+quickshell
+rofi
+stow
+swaync
+wallust
+zsh
