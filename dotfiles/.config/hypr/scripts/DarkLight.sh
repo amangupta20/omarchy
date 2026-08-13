@@ -1,10 +1,11 @@
-#!/bin/bash
+#!/usr/bin/env bash
 ## /* ---- 💫 https://github.com/JaKooLit 💫 ---- */  ##
 # For Dark and Light switching
 # Note: Scripts are looking for keywords Light or Dark except for wallpapers as the are in a separate directories
 
 # Paths
-wallpaper_base_path="$HOME/Pictures/wallpapers/Dynamic-Wallpapers"
+PICTURES_DIR="$(xdg-user-dir PICTURES 2>/dev/null || echo "$HOME/Pictures")"
+wallpaper_base_path="$PICTURES_DIR/wallpapers/Dynamic-Wallpapers"
 dark_wallpapers="$wallpaper_base_path/Dark"
 light_wallpapers="$wallpaper_base_path/Light"
 hypr_config_path="$HOME/.config/hypr"
@@ -19,6 +20,10 @@ kitty_conf="$HOME/.config/kitty/kitty.conf"
 wallust_config="$HOME/.config/wallust/wallust.toml"
 pallete_dark="dark16"
 pallete_light="light16"
+qt5ct_dark="$HOME/.config/qt5ct/colors/Catppuccin-Mocha.conf"
+qt5ct_light="$HOME/.config/qt5ct/colors/Catppuccin-Latte.conf"
+qt6ct_dark="$HOME/.config/qt6ct/colors/Catppuccin-Mocha.conf"
+qt6ct_light="$HOME/.config/qt6ct/colors/Catppuccin-Latte.conf"
 
 # intial kill process
 for pid in waybar rofi swaync ags swaybg; do
@@ -26,11 +31,11 @@ for pid in waybar rofi swaync ags swaybg; do
 done
 
 
-# Initialize awww if needed
-awww query || awww-daemon --format xrgb
+# Initialize swww if needed
+swww query || swww-daemon --format xrgb
 
-# Set awww options
-awww="awww img"
+# Set swww options
+swww="swww img"
 effect="--transition-bezier .43,1.19,1,.4 --transition-fps 60 --transition-type grow --transition-pos 0.925,0.977 --transition-duration 2"
 
 # Determine current theme mode
@@ -42,6 +47,14 @@ else
     next_mode="Light"
     # Logic for Light mode
     wallpaper_path="$light_wallpapers"
+fi
+# Select Qt color scheme templates for the upcoming mode
+if [ "$next_mode" = "Dark" ]; then
+    qt5ct_color_scheme="$qt5ct_dark"
+    qt6ct_color_scheme="$qt6ct_dark"
+else
+    qt5ct_color_scheme="$qt5ct_light"
+    qt6ct_color_scheme="$qt6ct_light"
 fi
 
 # Function to update theme mode for the next cycle
@@ -126,8 +139,8 @@ else
     next_wallpaper="$(find -L "${light_wallpapers}" -type f \( -iname "*.jpg" -o -iname "*.png" \) -print0 | shuf -n1 -z | xargs -0)"
 fi
 
-# Update wallpaper using awww command
-$awww "${next_wallpaper}" $effect
+# Update wallpaper using swww command
+$swww "${next_wallpaper}" $effect
 
 
 # Set Kvantum Manager theme & QT5/QT6 settings
@@ -235,7 +248,7 @@ set_custom_gtk_theme "$next_mode"
 update_theme_mode
 
 
-${SCRIPTSDIR}/WallustAwww.sh &&
+${SCRIPTSDIR}/WallustSwww.sh &&
 
 sleep 2
 # kill process
