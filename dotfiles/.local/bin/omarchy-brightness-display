@@ -1,0 +1,76 @@
+#!/bin/bash
+
+# omarchy:summary=Show or adjust brightness on the focused display.
+# omarchy:args=[--no-osd] [--monitor name] [+N%|N%-|N%|off|on]
+
+no_osd=0
+monitor=""
+
+while (( $# > 0 )); do
+  case "$1" in
+  --no-osd)
+    no_osd=1
+    shift
+    ;;
+  --monitor)
+    (( $# >= 2 )) || exit 1
+    monitor="$2"
+    shift 2
+    ;;
+  *)
+    break
+    ;;
+  esac
+done
+
+get_current() {
+  local cur
+  cur=$(brightnessctl -d acpi_video1 -m 2>/dev/null | cut -d, -f4 | tr -d '%')
+  if [[ -z $cur ]]; then
+    cur=$(brightnessctl -m 2>/dev/null | cut -d, -f4 | tr -d '%')
+  fi
+  echo "${cur:-50}"
+}
+
+if (( $# == 0 )); then
+  get_current
+  exit 0
+fi
+
+step="$1"
+
+if [[ $step == "off" ]]; then
+  hyprctl dispatch 'hl.dsp.dpms({ action = "disable" })' >/dev/null 2>&1
+  exit 0
+elif [[ $step == "on" ]]; then
+  hyprctl dispatch 'hl.dsp.dpms({ action = "enable" })' >/dev/null 2>&1
+  exit 0
+fi
+
+current=$(get_current)
+new_val=$current
+
+if [[ $step =~ ^\+([0-9]+)%?$ ]]; then
+  delta="${BASH_REMATCH[1]}"
+  new_val=$(( current + delta ))
+elif [[ $step =~ ^([0-9]+)%?-$ ]]; then
+  delta="${BASH_REMATCH[1]}"
+  new_val=$(( current - delta ))
+elif [[ $step =~ ^([0-9]+)%?$ ]]; then
+  new_val="${BASH_REMATCH[1]}"
+fi
+
+# Strictly clamp between 1 and 100
+(( new_val < 1 )) && new_val=1
+(( new_val > 100 )) && new_val=100
+
+# Set brightness directly on the active backlight device
+brightnessctl -d acpi_video1 set "${new_val}%" >/dev/null 2>&1 || brightnessctl set "${new_val}%" >/dev/null 2>&1
+
+# Also update secondary nodes in background to keep ACPI state clean
+(brightnessctl -d acpi_video0 set "${new_val}%" >/dev/null 2>&1; brightnessctl -d acpi_video2 set "${new_val}%" >/dev/null 2>&1) &
+
+# Trigger strictly clamped OSD
+if (( ! no_osd )); then
+  omarchy-osd -i brightness -p "$new_val" >/dev/null 2>&1 &
+fi

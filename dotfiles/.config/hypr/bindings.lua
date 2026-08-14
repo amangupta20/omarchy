@@ -24,6 +24,12 @@ o.bind("SUPER + A", "Workspace overview", hl.dsp.global("quickshell:overviewTogg
 -- Wallpaper selector on SUPER + W
 o.bind("SUPER + W", "Wallpaper selector", "omarchy-theme-bg-switcher")
 
+-- Monitor Brightness Function Keys
+o.bind("XF86MonBrightnessUp", "Brightness up", os.getenv("HOME") .. "/.local/bin/omarchy-brightness-display +5%", { locked = true, repeating = true })
+o.bind("XF86MonBrightnessDown", "Brightness down", os.getenv("HOME") .. "/.local/bin/omarchy-brightness-display 5%-", { locked = true, repeating = true })
+o.bind("SHIFT + XF86MonBrightnessUp", "Brightness maximum", os.getenv("HOME") .. "/.local/bin/omarchy-brightness-display 100%", { locked = true, repeating = true })
+o.bind("SHIFT + XF86MonBrightnessDown", "Brightness minimum", os.getenv("HOME") .. "/.local/bin/omarchy-brightness-display 1%", { locked = true, repeating = true })
+
 
 -- Applications
 -- File manager on SUPER + F, Fullscreen on SUPER + SHIFT + F
