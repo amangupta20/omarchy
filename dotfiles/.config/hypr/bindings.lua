@@ -22,7 +22,7 @@ o.bind("SUPER + Q", "Close active window", hl.dsp.window.close())
 o.bind("SUPER + A", "Workspace overview", hl.dsp.global("quickshell:overviewToggle"))
 
 -- Wallpaper selector on SUPER + W
-o.bind("SUPER + W", "Wallpaper selector", os.getenv("HOME") .. "/.config/hypr/UserScripts/WallpaperSelect.sh")
+o.bind("SUPER + W", "Wallpaper selector", "omarchy-theme-bg-switcher")
 
 -- Applications
 -- File manager on SUPER + F, Fullscreen on SUPER + SHIFT + F
