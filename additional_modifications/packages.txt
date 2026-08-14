@@ -1,6 +1,0 @@
-nwg-displays
-appimagelauncher
-swaync
-rofi
-networkmanager-applet
-mission-center
