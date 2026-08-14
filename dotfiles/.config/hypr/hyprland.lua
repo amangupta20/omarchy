@@ -10,6 +10,9 @@ dofile((os.getenv("OMARCHY_PATH") or "/usr/share/omarchy") .. "/default/hypr/boo
 -- keeping core window-manager bindings:
 -- omarchy_preinstalled_bindings = false
 
+-- Target Intel iGPU backlight for laptop panel
+hl.env("OMARCHY_BACKLIGHT_PATH", os.getenv("HOME") .. "/.config/omarchy/backlight")
+
 -- Load Omarchy defaults.
 require("default.hypr.omarchy")
 
