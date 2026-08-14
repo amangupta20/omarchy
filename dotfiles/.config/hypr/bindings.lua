@@ -37,7 +37,6 @@ o.bind("SUPER + SHIFT + B", "Browser (private)", "uwsm app -- zen-browser --priv
 
 o.bind("SUPER + M", "Music", "omarchy-launch-or-focus spotify")
 o.bind("SUPER + N", "Editor", "omarchy-launch-editor")
-o.bind("SUPER + T", "Activity", { tui = "btop" })
 o.bind("SUPER + D", "Docker", { tui = "lazydocker" })
 o.bind("SUPER + G", "Signal", "omarchy-launch-or-focus signal 'uwsm app -- signal-desktop'")
 o.bind("SUPER + O", "Obsidian", "omarchy-launch-or-focus obsidian 'uwsm app -- obsidian'")
