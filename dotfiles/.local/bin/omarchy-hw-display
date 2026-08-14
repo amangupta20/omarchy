@@ -1,0 +1,25 @@
+#!/bin/bash
+
+# Prefer true native hardware backlights if present
+for candidate in /sys/class/backlight/amdgpu_bl* /sys/class/backlight/intel_backlight; do
+  if [[ -e "$candidate" ]]; then
+    basename "$candidate"
+    exit 0
+  fi
+done
+
+# Ask brightnessctl for the default backlight device (which accurately picks Intel iGPU over NVIDIA dGPU)
+default_dev=$(brightnessctl -m 2>/dev/null | head -n1 | cut -d, -f1)
+if [[ -n "$default_dev" && -e "/sys/class/backlight/$default_dev" ]]; then
+  echo "$default_dev"
+  exit 0
+fi
+
+# Fallback to first available backlight
+for dev in /sys/class/backlight/*; do
+  [[ -e "$dev" ]] || continue
+  echo "$(basename "$dev")"
+  exit 0
+done
+
+exit 1
