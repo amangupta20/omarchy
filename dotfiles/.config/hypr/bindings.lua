@@ -12,8 +12,9 @@
 -- To disable all preinstalled app/webapp bindings, set:
 --   omarchy_preinstalled_bindings = false
 
--- Unbind default SUPER + W (which was close window in Quattro)
+-- Unbind default SUPER + W (which was close window in Quattro) and SUPER + SHIFT + W (Omawrite)
 hl.unbind("SUPER + W")
+hl.unbind("SUPER + SHIFT + W")
 
 -- Close active window with SUPER + Q
 o.bind("SUPER + Q", "Close active window", hl.dsp.window.close())
@@ -21,8 +22,9 @@ o.bind("SUPER + Q", "Close active window", hl.dsp.window.close())
 -- Workspace manager overview on SUPER + A (Quickshell)
 o.bind("SUPER + A", "Workspace overview", hl.dsp.global("quickshell:overviewToggle"))
 
--- Wallpaper selector on SUPER + W
-o.bind("SUPER + W", "Wallpaper selector", "omarchy-theme-bg-switcher")
+-- Wallpaper selector on SUPER + W & effects on SUPER + SHIFT + W
+o.bind("SUPER + W", "Wallpaper selector", os.getenv("HOME") .. "/.config/hypr/UserScripts/WallpaperSelect.sh")
+o.bind("SUPER + SHIFT + W", "Wallpaper effects", os.getenv("HOME") .. "/.config/hypr/UserScripts/WallpaperEffects.sh")
 
 
 -- Applications
