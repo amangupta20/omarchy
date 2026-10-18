@@ -1,147 +1,97 @@
 #!/bin/bash
-# /* ---- 💫 https://github.com/JaKooLit 💫 ---- */  #
-# Wallpaper Effects using ImageMagick (SUPER SHIFT W)
+# /* ---- 💫 https://github.com/JaKooLit 💫 ---- */
+# Wallpaper effects using ImageMagick, applied through Omarchy's background
+# engine so the shell and lock screen see the result (SUPER + SHIFT + W).
 
-# Variables
-terminal=kitty
 wallpaper_current="$HOME/.config/hypr/wallpaper_effects/.wallpaper_current"
 wallpaper_output="$HOME/.config/hypr/wallpaper_effects/.wallpaper_modified"
-SCRIPTSDIR="$HOME/.config/hypr/scripts"
-focused_monitor=$(hyprctl monitors -j | jq -r '.[] | select(.focused) | .name')
 rofi_theme="$HOME/.config/rofi/config-wallpaper-effect.rasi"
+iDIR="$HOME/.config/swaync/images"
+current_background="$HOME/.local/state/omarchy/current/background"
 
-# Sync .wallpaper_current from awww's actual current wallpaper
-awww_cache="$HOME/.cache/awww_last_wallpaper"
-if [[ -f $awww_cache ]]; then
-  awww_path=$(cat "$awww_cache")
-  if [[ -n $awww_path && -f $awww_path ]]; then
-    cp "$awww_path" "$wallpaper_current"
-  fi
+current_path=$(readlink -f "$current_background" 2>/dev/null)
+if [[ -z $current_path || ! -f $current_path ]]; then
+  notify-send -i "$iDIR/error.png" "No wallpaper" "No current background to modify"
+  exit 1
 fi
 
-# Directory for swaync
-iDIR="$HOME/.config/swaync/images"
-iDIRi="$HOME/.config/swaync/icons"
+if [[ ${current_path,,} =~ \.(mp4|m4v|mov|webm|mkv|avi)$ ]]; then
+  notify-send -i "$iDIR/error.png" "Video wallpaper" "Effects are only available for images"
+  exit 1
+fi
 
-# awww transition config
-FPS=60
-TYPE="wipe"
-DURATION=2
-BEZIER=".43,1.19,1,.4"
-AWWW_PARAMS="--transition-fps $FPS --transition-type $TYPE --transition-duration $DURATION --transition-bezier $BEZIER"
+# Keep the unmodified image so "No Effects" can put it back. When the current
+# background is already our own copy, the original is still on disk.
+if [[ $current_path != "$wallpaper_output" && $current_path != "$wallpaper_current" ]]; then
+  cp -f "$current_path" "$wallpaper_current"
+fi
 
-# Define ImageMagick effects
+# ImageMagick filters; the source is $wallpaper_current and the result is
+# written to $wallpaper_output as PNG.
 declare -A effects=(
-    ["No Effects"]="no-effects"
-    ["Black & White"]="magick $wallpaper_current -colorspace gray -sigmoidal-contrast 10,40% $wallpaper_output"
-    ["Blurred"]="magick $wallpaper_current -blur 0x10 $wallpaper_output"
-    ["Charcoal"]="magick $wallpaper_current -charcoal 0x5 $wallpaper_output"
-    ["Edge Detect"]="magick $wallpaper_current -edge 1 $wallpaper_output"
-    ["Emboss"]="magick $wallpaper_current -emboss 0x5 $wallpaper_output"
-    ["Frame Raised"]="magick $wallpaper_current +raise 150 $wallpaper_output"
-    ["Frame Sunk"]="magick $wallpaper_current -raise 150 $wallpaper_output"
-    ["Negate"]="magick $wallpaper_current -negate $wallpaper_output"
-    ["Oil Paint"]="magick $wallpaper_current -paint 4 $wallpaper_output"
-    ["Posterize"]="magick $wallpaper_current -posterize 4 $wallpaper_output"
-    ["Polaroid"]="magick $wallpaper_current -polaroid 0 $wallpaper_output"
-    ["Sepia Tone"]="magick $wallpaper_current -sepia-tone 65% $wallpaper_output"
-    ["Solarize"]="magick $wallpaper_current -solarize 80% $wallpaper_output"
-    ["Sharpen"]="magick $wallpaper_current -sharpen 0x5 $wallpaper_output"
-    ["Vignette"]="magick $wallpaper_current -vignette 0x3 $wallpaper_output"
-    ["Vignette-black"]="magick $wallpaper_current -background black -vignette 0x3 $wallpaper_output"
-    ["Zoomed"]="magick $wallpaper_current -gravity Center -extent 1:1 $wallpaper_output"
+  ["Black & White"]="-colorspace gray -sigmoidal-contrast 10,40%"
+  ["Blurred"]="-blur 0x10"
+  ["Charcoal"]="-charcoal 0x5"
+  ["Edge Detect"]="-edge 1"
+  ["Emboss"]="-emboss 0x5"
+  ["Frame Raised"]="+raise 150"
+  ["Frame Sunk"]="-raise 150"
+  ["Negate"]="-negate"
+  ["Oil Paint"]="-paint 4"
+  ["Posterize"]="-posterize 4"
+  ["Polaroid"]="-polaroid 0"
+  ["Sepia Tone"]="-sepia-tone 65%"
+  ["Solarize"]="-solarize 80%"
+  ["Sharpen"]="-sharpen 0x5"
+  ["Vignette"]="-vignette 0x3"
+  ["Vignette-black"]="-background black -vignette 0x3"
+  ["Zoomed"]="-gravity Center -extent 1:1"
 )
 
-# Function to apply no effects
+apply_effect() {
+  local filter="$1"
+  local -a args
+  read -r -a args <<<"$filter"
+  magick "$wallpaper_current" "${args[@]}" "png:$wallpaper_output" || return 1
+  omarchy-theme-bg-set "$wallpaper_output"
+}
+
 no-effects() {
-    awww img -o "$focused_monitor" "$wallpaper_current" $AWWW_PARAMS &&
-    wait $!
-    wallust run "$wallpaper_current" -s &&
-    wait $!
-    # Refresh rofi, waybar, wallust palettes
-	sleep 2
-	"$SCRIPTSDIR/Refresh.sh"
-
-    notify-send -u low -i "$iDIR/ja.png" "No wallpaper" "effects applied"
-    # copying wallpaper for rofi menu
-    cp "$wallpaper_current" "$wallpaper_output"
+  omarchy-theme-bg-set "$wallpaper_current"
+  notify-send -u low -i "$iDIR/ja.png" "No effects" "original wallpaper restored"
 }
 
-# Function to run rofi menu
 main() {
-    # Populate rofi menu options
-    options=("No Effects")
-    for effect in "${!effects[@]}"; do
-        [[ "$effect" != "No Effects" ]] && options+=("$effect")
-    done
+  local options=("No Effects")
+  local effect choice
 
-    choice=$(printf "%s\n" "${options[@]}" | LC_COLLATE=C sort | rofi -dmenu -i -config $rofi_theme)
+  for effect in "${!effects[@]}"; do
+    options+=("$effect")
+  done
 
-    # Process user choice
-    if [[ -n "$choice" ]]; then
-        if [[ "$choice" == "No Effects" ]]; then
-            no-effects
-        elif [[ "${effects[$choice]+exists}" ]]; then
-            # Apply selected effect
-            notify-send -u normal -i "$iDIR/ja.png"  "Applying:" "$choice effects"
-            eval "${effects[$choice]}"
-            
-            # intial kill process
-            for pid in swaybg mpvpaper; do
-            killall -SIGUSR1 "$pid"
-            done
+  choice=$(printf "%s\n" "${options[@]}" | LC_COLLATE=C sort | rofi -dmenu -i -config "$rofi_theme")
+  [[ -z $choice ]] && exit 0
 
-            sleep 1
-            awww img -o "$focused_monitor" "$wallpaper_output" $AWWW_PARAMS &
+  if [[ $choice == "No Effects" ]]; then
+    no-effects
+    return
+  fi
 
-            sleep 2
-  
-            wallust run "$wallpaper_output" -s &
-            sleep 1
-            # Refresh rofi, waybar, wallust palettes
-            "${SCRIPTSDIR}/Refresh.sh"
-            notify-send -u low -i "$iDIR/ja.png" "$choice" "effects applied"
-        else
-            echo "Effect '$choice' not recognized."
-        fi
-    fi
+  if [[ -z ${effects[$choice]+exists} ]]; then
+    echo "Effect '$choice' not recognized."
+    exit 1
+  fi
+
+  notify-send -u normal -i "$iDIR/ja.png" "Applying:" "$choice effects"
+  if apply_effect "${effects[$choice]}"; then
+    notify-send -u low -i "$iDIR/ja.png" "$choice" "effects applied"
+  else
+    notify-send -u critical -i "$iDIR/error.png" "Wallpaper effect failed" "$choice"
+  fi
 }
 
-# Check if rofi is already running and kill it
-if pidof rofi > /dev/null; then
-    pkill rofi
+if pidof rofi >/dev/null; then
+  pkill rofi
 fi
 
 main
-
-sleep 1
-
-if [[ -n "$choice" ]]; then
-  sddm_simple="/usr/share/sddm/themes/simple_sddm_2"
-  if [ -d "$sddm_simple" ]; then
-  
-	# Check if yad is running to avoid multiple yad notification
-	if pidof yad > /dev/null; then
-	  killall yad
-	fi
-	
-	if yad --info --text="Set current wallpaper as SDDM background?\n\nNOTE: This only applies to SIMPLE SDDM v2 Theme" \
-    --text-align=left \
-    --title="SDDM Background" \
-    --timeout=5 \
-    --timeout-indicator=right \
-    --button="yad-yes:0" \
-    --button="yad-no:1" \
-    ; then
-
-    # Check if terminal exists
-    if ! command -v "$terminal" &>/dev/null; then
-    notify-send -i "$iDIR/ja.png" "Missing $terminal" "Install $terminal to enable setting of wallpaper background"
-    exit 1
-    fi
-
-	exec $SCRIPTSDIR/sddm_wallpaper.sh --effects
-    
-    fi
-  fi
-fi
