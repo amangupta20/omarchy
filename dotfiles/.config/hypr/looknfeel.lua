@@ -57,3 +57,17 @@ hl.config({
     use_cpu_buffer = true,
   },
 })
+
+-- Keep XWayland apps (e.g. fullscreen Ren'Py games) from miscalculating the
+-- cursor size/position under fractional scaling.
+hl.config({
+  xwayland = {
+    force_zero_scaling = true,
+  },
+})
+
+-- Give XWayland and native apps an explicit, installed cursor theme so none
+-- of them end up with a transparent cursor. Adwaita ships a complete XCursor
+-- set; Hyprland falls back to it when no Hyprcursor theme matches the name.
+hl.env("XCURSOR_THEME", "Adwaita")
+hl.env("HYPRCURSOR_THEME", "Adwaita")
