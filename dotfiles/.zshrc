@@ -31,8 +31,6 @@ pokemon-colorscripts --no-title -s -r | fastfetch -c $HOME/.config/fastfetch/con
 #alias la='ls -a'
 #alias lla='ls -la'
 #alias lt='ls --tree'
-alias recover="$HOME/.local/share/omarchy/personal/recover.sh"
-alias stower="recover --link"
 alias ls='eza -lh --group-directories-first --icons=auto'
 alias lsa='ls -a'
 alias lt='eza --tree --level=2 --long --icons --git'

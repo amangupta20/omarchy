@@ -54,6 +54,9 @@ o.bind("SUPER + D", "Docker", { tui = "lazydocker" })
 -- Web apps
 hl.unbind("SUPER + SHIFT + A")
 hl.unbind("SUPER + SHIFT + X")
+-- Upstream binds this to "Move active window out of group"; free it first or
+-- both actions fire. Upstream's own Google Messages binding is SUPER + SHIFT + CTRL + G.
+hl.unbind("SUPER + ALT + G")
 
 o.bind("SUPER + SHIFT + A", "Grok", { webapp = "https://grok.com" })
 o.bind("SUPER + E", "Email", { webapp = "https://app.hey.com" })
