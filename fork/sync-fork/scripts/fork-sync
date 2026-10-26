@@ -1,0 +1,1039 @@
+#!/bin/bash
+# fork-sync - keep a downstream fork of Omarchy (or any stow-managed dotfiles
+# fork) safely in step with upstream, without losing local modifications.
+#
+# Summaries in one place:
+#   fork-sync state      git facts: remotes, branch, divergence, merge conflicts
+#   fork-sync inventory  what the fork changes, and which of it is actually live
+#   fork-sync keybinds   keybinding collisions against upstream defaults
+#   fork-sync drift      upstream changes hiding behind shadowed config files
+#   fork-sync doctor     broken references, stow hazards, tracked runtime state
+#   fork-sync audit      all of the above (read-only, exit 2 if a blocker is found)
+#   fork-sync merge      fetch + verify + merge upstream into the current branch
+#   fork-sync apply      restow the dotfiles and reload the running session
+#
+# Everything is discovered from the repository, so this works on any fork that
+# keeps its personal files in a stow package. Override detection with:
+#   FORK_SYNC_UPSTREAM_REMOTE=upstream
+#   FORK_SYNC_UPSTREAM_BRANCH=quattro
+#   FORK_SYNC_STOW_DIR=dotfiles
+#
+# Exit codes: 0 clean, 1 warnings, 2 blockers.
+
+set -uo pipefail
+
+readonly VERSION="1.0.0"
+
+if [[ -t 1 ]]; then
+  readonly C_RESET=$'\033[0m'
+  readonly C_BOLD=$'\033[1m'
+  readonly C_DIM=$'\033[2m'
+  readonly C_RED=$'\033[31m'
+  readonly C_GREEN=$'\033[32m'
+  readonly C_YELLOW=$'\033[33m'
+  readonly C_BLUE=$'\033[34m'
+  readonly C_CYAN=$'\033[36m'
+else
+  readonly C_RESET="" C_BOLD="" C_DIM="" C_RED="" C_GREEN="" C_YELLOW="" C_BLUE="" C_CYAN=""
+fi
+
+WARNINGS=0
+BLOCKERS=0
+
+STEP_N=0
+
+step() {
+  STEP_N=$((STEP_N + 1))
+  printf '\n%s%s%s %s%s%s\n' "$C_BOLD" "$C_BLUE" "$(printf '%02d' $STEP_N)" "$C_RESET$C_BOLD" "$*" "$C_RESET"
+}
+
+substep() { printf '\n  %s%s%s\n' "$C_BOLD" "$*" "$C_RESET"; }
+ok()      { printf '  %s+%s %s\n' "$C_GREEN" "$C_RESET" "$*"; }
+note()    { printf '  %s.%s %s\n' "$C_DIM" "$C_RESET" "$*"; }
+note_err() { printf '  %s.%s %s\n' "$C_DIM" "$C_RESET" "$*" >&2; }
+warn()    { printf '  %s!%s %s\n' "$C_YELLOW" "$C_RESET" "$*"; WARNINGS=$((WARNINGS + 1)); }
+bad()     { printf '  %sx%s %s\n' "$C_RED" "$C_RESET" "$*"; BLOCKERS=$((BLOCKERS + 1)); }
+detail()  { printf '      %s%s%s\n' "$C_DIM" "$*" "$C_RESET"; }
+code()    { printf '      %s%s%s\n' "$C_CYAN" "$*" "$C_RESET"; }
+
+die() {
+  printf '%sfork-sync: %s%s\n' "$C_RED" "$*" "$C_RESET" >&2
+  exit 2
+}
+
+usage() {
+  cat <<'USAGE'
+fork-sync - keep a stow-managed fork of Omarchy safely in step with upstream.
+
+Commands:
+  state      git facts: remotes, branch, divergence, merge conflicts
+  inventory  what the fork changes, and which of it is actually live
+  keybinds   keybinding collisions against upstream defaults
+  drift      upstream changes hiding behind shadowed config files
+  doctor     broken references, stow hazards, tracked runtime state
+  audit      all of the above (read-only; exit 2 when a blocker is found)
+  merge      fetch + verify + merge upstream into the current branch
+  apply      restow the dotfiles and reload the running session
+
+Options:
+  merge --allow-dirty    merge even with uncommitted changes
+  apply --yes            apply without asking
+
+Detection overrides:
+  FORK_SYNC_UPSTREAM_REMOTE=upstream
+  FORK_SYNC_UPSTREAM_BRANCH=quattro
+  FORK_SYNC_STOW_DIR=dotfiles
+
+Exit codes: 0 clean, 1 warnings, 2 blockers.
+USAGE
+  printf '\nVersion %s\n' "$VERSION"
+}
+
+# --- discovery -------------------------------------------------------------
+
+repo_root=""
+repo_root_real=""
+branch=""
+upstream_remote=""
+upstream_branch=""
+upstream_ref=""
+stow_root=""
+default_dir=""
+cache_dir=""
+tmp=""
+
+init() {
+  repo_root=$(git rev-parse --show-toplevel 2>/dev/null)
+  if [[ -z $repo_root ]]; then
+    # Not run from inside a worktree: fall back to the repository this script
+    # lives in (<repo>/fork/sync-fork/scripts/fork-sync), so an agent can call
+    # it by absolute path from any directory.
+    local here
+    here=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd -P)
+    repo_root=$(git -C "$here/../../.." rev-parse --show-toplevel 2>/dev/null)
+  fi
+  if [[ -n ${FORK_SYNC_REPO:-} ]]; then
+    repo_root=$(git -C "$FORK_SYNC_REPO" rev-parse --show-toplevel 2>/dev/null)
+  fi
+  [[ -n $repo_root ]] || die "not inside a git repository (set FORK_SYNC_REPO)"
+  cd "$repo_root" || die "cannot enter $repo_root"
+  repo_root_real=$(pwd -P)
+  branch=$(git rev-parse --abbrev-ref HEAD)
+  cache_dir="${XDG_CACHE_HOME:-$HOME/.cache}/fork-sync"
+  mkdir -p "$cache_dir"
+
+  tmp=$(mktemp -d) || die "cannot create a temporary directory"
+  trap 'rm -rf "$tmp"' EXIT
+
+  upstream_remote=$(detect_upstream_remote)
+  if [[ -z $upstream_remote ]]; then
+    die "no upstream remote found; set FORK_SYNC_UPSTREAM_REMOTE"
+  fi
+
+  upstream_branch=$(detect_upstream_branch "$upstream_remote")
+  if [[ -z $upstream_branch ]]; then
+    die "cannot work out the upstream default branch; set FORK_SYNC_UPSTREAM_BRANCH"
+  fi
+  upstream_ref="$upstream_remote/$upstream_branch"
+
+  stow_root=$(detect_stow_root)
+  default_dir=$(detect_default_dir)
+}
+
+# The upstream is the remote this fork pulls from: a remote literally named
+# "upstream" if there is one, otherwise the first remote that is not the one the
+# current branch tracks.
+detect_upstream_remote() {
+  local remotes tracking candidate url other
+  if [[ -n ${FORK_SYNC_UPSTREAM_REMOTE:-} ]]; then
+    printf '%s\n' "$FORK_SYNC_UPSTREAM_REMOTE"
+    return 0
+  fi
+
+  remotes=$(git remote)
+  if grep -qx "upstream" <<<"$remotes"; then
+    printf 'upstream\n'
+    return 0
+  fi
+
+  tracking=$(git config --get "branch.$branch.remote" 2>/dev/null)
+  for candidate in $remotes; do
+    if [[ $candidate != "$tracking" ]]; then
+      printf '%s\n' "$candidate"
+      return 0
+    fi
+  done
+
+  # Only one remote: it is both the fork and the only place to merge from.
+  if [[ -n $tracking ]]; then
+    printf '%s\n' "$tracking"
+    return 0
+  fi
+  printf '%s\n' "$remotes" | head -1
+}
+
+# Upstream's default branch. Ordered so that a network fact always beats a
+# local guess: $remote/HEAD in refs/remotes is only ever written by an explicit
+# `git remote set-head`, so it goes stale as soon as upstream renames its
+# default branch (which is exactly how Omarchy moved from master to quattro).
+detect_upstream_branch() {
+  local remote=$1
+  local cache="$cache_dir/upstream-default-branch.$remote"
+  local name
+
+  if [[ -n ${FORK_SYNC_UPSTREAM_BRANCH:-} ]]; then
+    printf '%s\n' "$FORK_SYNC_UPSTREAM_BRANCH"
+    return 0
+  fi
+
+  if [[ -z ${FORK_SYNC_REFRESH:-} ]] && [[ -f $cache ]] &&
+    (($(date +%s) - $(stat -c %Y "$cache") < 86400)); then
+    name=$(<"$cache")
+    if git rev-parse --verify --quiet "refs/remotes/$remote/$name" >/dev/null; then
+      printf '%s\n' "$name"
+      return 0
+    fi
+  fi
+
+  name=$(git ls-remote --symref "$remote" HEAD 2>/dev/null |
+    awk '/^ref:/ { sub("refs/heads/", "", $2); print $2; exit }')
+  if [[ -n $name ]]; then
+    printf '%s\n' "$name" | tee "$cache" >/dev/null
+    printf '%s\n' "$name"
+    return 0
+  fi
+
+  local symref
+  symref=$(git symbolic-ref --quiet "refs/remotes/$remote/HEAD" 2>/dev/null)
+  if [[ $symref == "refs/remotes/$remote/"* ]]; then
+    name=${symref#"refs/remotes/$remote/"}
+    if git rev-parse --verify --quiet "refs/remotes/$remote/$name" >/dev/null; then
+      printf '%s\n' "$name" | tee "$cache" >/dev/null
+      note_err "offline: guessed $name from a possibly stale refs/remotes/$remote/HEAD"
+      printf '%s\n' "$name"
+      return 0
+    fi
+  fi
+
+  for name in quattro main master dev trunk; do
+    if git rev-parse --verify --quiet "refs/remotes/$remote/$name" >/dev/null; then
+      printf '%s\n' "$name" | tee "$cache" >/dev/null
+      note_err "offline: guessed $name from the local remote-tracking refs"
+      printf '%s\n' "$name"
+      return 0
+    fi
+  done
+
+  return 0
+}
+
+# The stow package: the directory whose contents mirror $HOME.
+detect_stow_root() {
+  local candidate path
+
+  if [[ -n ${FORK_SYNC_STOW_DIR:-} ]]; then
+    printf '%s\n' "$FORK_SYNC_STOW_DIR"
+    return 0
+  fi
+
+  while IFS= read -r path; do
+    [[ -n $path ]] || continue
+    candidate=${path%/.stow-local-ignore}
+    if [[ $candidate == "$path" ]]; then
+      printf '.\n'
+    else
+      printf '%s\n' "$candidate"
+    fi
+    return 0
+  done < <(git ls-files -- '*/.stow-local-ignore' '.stow-local-ignore' 2>/dev/null)
+
+  for candidate in dotfiles stow home; do
+    if [[ -d $candidate/.config ]]; then
+      printf '%s\n' "$candidate"
+      return 0
+    fi
+  done
+
+  printf '\n'
+}
+
+# Where Omarchy keeps the defaults that back the user's config.
+detect_default_dir() {
+  local candidate
+  for candidate in default config; do
+    if [[ -d $candidate ]]; then
+      printf '%s\n' "$candidate"
+      return 0
+    fi
+  done
+  printf '\n'
+}
+
+# Map a stow file to the shipped file it shadows, if any.
+# .config/hypr/bindings.lua -> config/hypr/bindings.lua
+# .local/bin/foo            -> bin/foo
+upstream_counterpart() {
+  local rel=${1#"$stow_root/"}
+  case $rel in
+    .config/*) printf 'config/%s\n' "${rel#.config/}" ;;
+    .local/bin/*) printf 'bin/%s\n' "${rel#.local/bin/}" ;;
+    *) return 1 ;;
+  esac
+}
+
+upstream_has() { git cat-file -e "$upstream_ref:$1" 2>/dev/null; }
+head_has() { git cat-file -e "HEAD:$1" 2>/dev/null; }
+
+merge_base() { git merge-base "$upstream_ref" HEAD; }
+
+# Merge without touching the worktree: returns 0 clean, 1 conflicts, 2 error.
+merge_is_clean() {
+  git merge-tree --write-tree "$upstream_ref" HEAD >/dev/null 2>&1
+  local rc=$?
+  if ((rc == 1)); then
+    return 1
+  elif ((rc == 0)); then
+    return 0
+  fi
+  # Older git: fall back to a three-way dry run.
+  git merge-tree "$(merge_base)" HEAD "$upstream_ref" 2>/dev/null | grep -q '^<<<<<<<' && return 1
+  return 0
+}
+
+# --- binding extraction ----------------------------------------------------
+
+# gawk program: print "KEY<TAB>KIND<TAB>DESCRIPTION" for every binding call in
+# the lua files it is given. Handles o.bind, o.rebind, o.bind_toggle,
+# o.bind_hold and hl.unbind, including a nil description.
+readonly BIND_AWK='
+  /^[[:space:]]*--/ { next }
+  {
+    s = $0
+    while (match(s, /(o\.(bind|rebind|bind_toggle|bind_hold)|hl\.unbind)\(/, m)) {
+      kind = m[2]
+      if (kind == "") kind = "unbind"
+      rest = substr(s, RSTART + RLENGTH)
+      sub(/^[[:space:]]*/, "", rest)
+      if (substr(rest, 1, 1) != "\"") { s = rest; continue }
+      if (!match(rest, /^"([^"]*)"/, k)) { s = rest; continue }
+      key = k[1]
+      after = substr(rest, RLENGTH + 1)
+      desc = ""
+      if (kind != "unbind") {
+        if (match(after, /^[[:space:]]*,[[:space:]]*("[^"]*"|nil)/, d)) {
+          desc = d[1]
+          gsub(/^"|"$/, "", desc)
+          if (desc == "nil") desc = ""
+        }
+      }
+      printf "%s\037%s\037%s\n", key, kind, desc
+      s = after
+    }
+  }
+'
+
+# Extract bindings from lua files on disk.
+extract_bindings() {
+  local -a files=()
+  while IFS= read -r -d '' f; do files+=("$f"); done < <(find "$@" -name '*.lua' -print0 2>/dev/null)
+  ((${#files[@]} > 0)) || return 0
+  awk "$BIND_AWK" "${files[@]}"
+}
+
+# Extract bindings from a path inside a git ref, without touching the worktree.
+bindings_for_ref() {
+  local ref=$1 path=$2 dir
+  dir="$tmp/binds.$(printf '%s' "$ref$path" | tr '/. ' '___')"
+  rm -rf "$dir"
+  mkdir -p "$dir"
+  git archive "$ref" -- "$path" 2>/dev/null | tar -x -C "$dir" 2>/dev/null || return 0
+  extract_bindings "$dir"
+}
+
+# Locate the directory holding upstream's default bindings.
+upstream_bindings_path() {
+  local candidate
+  for candidate in "$default_dir/hypr/bindings" "$default_dir/hypr"; do
+    [[ -n $default_dir ]] || continue
+    if [[ $(git cat-file -t "$upstream_ref:$candidate" 2>/dev/null) == "tree" ]]; then
+      printf '%s\n' "$candidate"
+      return 0
+    fi
+  done
+  return 1
+}
+
+# --- state -----------------------------------------------------------------
+
+cmd_state() {
+  step "Repository state"
+  note "repo      $repo_root_real"
+  note "branch    $branch"
+  note "upstream  $upstream_ref ($(git log -1 --format='%h %s' "$upstream_ref" 2>/dev/null | cut -c1-70))"
+
+  local mb ahead behind
+  mb=$(merge_base)
+  if [[ -z $mb ]]; then
+    bad "no merge base with $upstream_ref -- histories are unrelated"
+    return
+  fi
+  note "base      $(git log -1 --format='%h %s' "$mb" | cut -c1-70)"
+
+  read -r behind ahead < <(git rev-list --left-right --count "$upstream_ref...HEAD")
+  printf '\n'
+  if ((behind > 0)); then
+    warn "fork is $behind commit(s) behind $upstream_ref"
+  else
+    ok "fork is up to date with $upstream_ref"
+  fi
+  if ((ahead > 0)); then
+    ok "fork has $ahead commit(s) of its own"
+  else
+    note "fork has no commits of its own"
+  fi
+
+  if merge_is_clean; then
+    ok "merge is conflict-free"
+  else
+    bad "merging $upstream_ref would conflict -- resolve by hand"
+  fi
+
+  local dirty
+  dirty=$(git status --porcelain --untracked-files=no | head -20)
+  if [[ -n $dirty ]]; then
+    warn "uncommitted changes in the worktree"
+    printf '%s\n' "$dirty" | while IFS= read -r line; do detail "$line"; done
+  else
+    ok "worktree is clean"
+  fi
+
+  if [[ -n $stow_root ]]; then
+    note "stow      $stow_root/ -> \$HOME"
+  else
+    warn "no stow package detected (set FORK_SYNC_STOW_DIR)"
+  fi
+
+  local pkg
+  if command -v pacman >/dev/null 2>&1; then
+    pkg=$(pacman -Q omarchy-dev 2>/dev/null || pacman -Q omarchy 2>/dev/null)
+    [[ -n $pkg ]] && note "package   $pkg"
+    if command -v omarchy >/dev/null 2>&1; then
+      note "live tree OMARCHY_PATH=${OMARCHY_PATH:-unknown}"
+    fi
+  fi
+}
+
+# --- inventory -------------------------------------------------------------
+
+cmd_inventory() {
+  step "What the fork changes"
+
+  local mb
+  mb=$(merge_base)
+  local changed
+  changed=$(git diff --name-status "$mb" HEAD)
+
+  if [[ -z $changed ]]; then
+    note "the fork changes nothing relative to the merge base"
+  else
+    local added modified deleted
+    added=$(awk '$1 == "A"' <<<"$changed" | wc -l)
+    modified=$(awk '$1 ~ /^M/' <<<"$changed" | wc -l)
+    deleted=$(awk '$1 == "D"' <<<"$changed" | wc -l)
+    note "vs merge base: $added added, $modified modified, $deleted deleted"
+    if ((modified > 0 || deleted > 0)); then
+      sub1="Changes to files upstream also ships (merge risk):"
+      substep "$sub1"
+      awk '$1 ~ /^[MD]/ { print "      " $2 }' <<<"$changed" | head -40
+    else
+      ok "no upstream-shipped file is modified -- conflicts are structurally impossible"
+    fi
+  fi
+
+  [[ -n $stow_root ]] || return 0
+
+  substep "Stow package: $stow_root/"
+  local rel target resolved live=0 absent=0 foreign=0 broken=0
+  local -a foreign_list=() broken_list=()
+  local -A mode=()
+  while read -r m _ _ p; do mode[$p]=$m; done < <(git ls-files -s -- "$stow_root")
+  while IFS= read -r rel; do
+    # Skip stow's own control file: it is never linked into $HOME.
+    [[ ${rel##*/} == ".stow-local-ignore" ]] && continue
+    target="$HOME/${rel#"$stow_root/"}"
+    resolved=$(readlink -f "$target" 2>/dev/null)
+    if [[ ${mode[$rel]:-} == "120000" ]]; then
+      # The repo entry is itself a symlink (e.g. into sysfs); stow recreates it.
+      [[ -e $resolved ]] || broken_list+=("${rel#"$stow_root/"}")
+      live=$((live + 1))
+    elif [[ -L $target && -z $resolved ]]; then
+      broken=$((broken + 1))
+      broken_list+=("${rel#"$stow_root/"}")
+    elif [[ -z $resolved ]]; then
+      absent=$((absent + 1))
+    elif [[ $resolved == "$repo_root_real/$rel" ]]; then
+      live=$((live + 1))
+    else
+      foreign=$((foreign + 1))
+      foreign_list+=("${rel#"$stow_root/"} -> $resolved")
+    fi
+  done < <(git ls-files -- "$stow_root")
+
+  ok "$live file(s) stowed and live in \$HOME"
+  ((absent > 0)) && note "$absent file(s) tracked but not present in \$HOME"
+  ((foreign > 0)) && note "$foreign file(s) tracked but not linked from the repo (stale snapshot)"
+  ((broken > 0)) && warn "$broken broken symlink(s)"
+
+  local item
+  for item in "${broken_list[@]:-}"; do
+    [[ -n $item ]] && detail "broken: $item"
+  done
+  for item in "${foreign_list[@]:-}"; do
+    [[ -n $item ]] && detail "not stowed: $item"
+  done
+
+  substep "Files that shadow something upstream ships"
+  local shadows=0 kind delta
+  while IFS= read -r rel; do
+    target="$HOME/${rel#"$stow_root/"}"
+    [[ $(readlink -f "$target" 2>/dev/null) == "$repo_root_real/$rel" ]] || continue
+    counterpart=$(upstream_counterpart "$rel") || continue
+    upstream_has "$counterpart" || continue
+    shadows=$((shadows + 1))
+    case ${rel#"$stow_root/"} in
+      .config/*) kind="config, refresh hazard" ;;
+      .local/bin/*) kind="command, shadows PATH" ;;
+      *) kind="file" ;;
+    esac
+    if head_has "$counterpart"; then
+      delta=$(diff "$repo_root/$rel" <(git show "HEAD:$counterpart") 2>/dev/null | grep -cE '^[<>]')
+      detail "${rel#"$stow_root/"} -> $counterpart  [$kind, $delta line(s) differ from shipped]"
+    else
+      detail "${rel#"$stow_root/"} -> $counterpart  [$kind]"
+    fi
+  done < <(git ls-files -- "$stow_root")
+
+  if ((shadows == 0)); then
+    ok "nothing of yours shadows a shipped file"
+  else
+    note "$shadows file(s) of yours replace a file upstream ships -- upstream edits to them will not reach you"
+  fi
+}
+
+# --- keybinds --------------------------------------------------------------
+
+cmd_keybinds() {
+  step "Keybinding collisions"
+
+  local up_path
+  if ! up_path=$(upstream_bindings_path); then
+    warn "cannot find upstream default bindings under ${default_dir:-default}/hypr"
+    return
+  fi
+
+  local fork_dir="$stow_root/.config/hypr"
+  if [[ ! -d $fork_dir ]]; then
+    note "no $fork_dir -- nothing to compare"
+    return
+  fi
+
+  bindings_for_ref "$upstream_ref" "$up_path" >"$tmp/up.tsv"
+  extract_bindings "$fork_dir" >"$tmp/fork.tsv"
+
+  if [[ ! -s $tmp/fork.tsv ]]; then
+    ok "no personal keybinding overrides"
+    return
+  fi
+
+  awk -F'\037' -v up="$tmp/up.tsv" '
+    BEGIN {
+      while ((getline line < up) > 0) {
+        split(line, f, "\037")
+        if (f[2] == "unbind") continue
+        up_desc[f[1]] = (f[1] in up_desc) ? up_desc[f[1]] " / " f[3] : f[3]
+      }
+    }
+    {
+      k = $1
+      kind = $2
+      if (!(k in seen)) { order[++n] = k; seen[k] = 1 }
+      if (kind == "unbind") fork_unbound[k] = 1
+      else {
+        fork_kind[k] = kind
+        fork_desc[k] = (k in fork_desc) ? fork_desc[k] " / " $3 : $3
+      }
+    }
+    END {
+      for (i = 1; i <= n; i++) {
+        k = order[i]
+        upstream = (k in up_desc) ? up_desc[k] : ""
+        has_fork_bind = (k in fork_kind)
+        was_unbound = (k in fork_unbound)
+        if (has_fork_bind && upstream != "") {
+          verdict = was_unbound ? "OK" : "COLLISION"
+          rule = was_unbound ? "unbound first, then rebound" : "upstream binds this too and you never unbind it"
+        } else if (has_fork_bind) {
+          verdict = "OK"; rule = "fork-only key"
+        } else if (upstream != "") {
+          verdict = "OK"; rule = "unbound only, still frees a default"
+        } else {
+          verdict = "STALE"; rule = "unbinds a key upstream does not bind"
+        }
+        printf "%s\037%s\037%s\037%s\037%s\037%s\n",
+          verdict, k, (has_fork_bind ? fork_kind[k] : "unbind"), fork_desc[k], upstream, rule
+      }
+    }
+  ' "$tmp/fork.tsv" >"$tmp/verdicts.tsv"
+
+  local collisions=0 stale=0 replaced=0 forkonly=0
+  local verdict key kind fork_desc upstream rule
+  while IFS=$'\037' read -r verdict key kind fork_desc upstream rule; do
+    case $verdict in
+      COLLISION)
+        collisions=$((collisions + 1))
+        bad "$key -- $rule"
+        detail "yours:    $kind ${fork_desc:-}"
+        detail "upstream: $upstream"
+        ;;
+      STALE)
+        stale=$((stale + 1))
+        warn "$key -- $rule"
+        ;;
+      *)
+        if [[ $rule == "fork-only key" ]]; then
+          forkonly=$((forkonly + 1))
+        else
+          replaced=$((replaced + 1))
+        fi
+        ;;
+    esac
+  done <"$tmp/verdicts.tsv"
+
+  ((collisions == 0)) && ok "no double-bound keys"
+  ((stale == 0)) && ok "no stale unbinds"
+  note "$replaced key(s) replace an upstream default, $forkonly fork-only key(s)"
+
+  substep "Upstream bindings that moved since your last sync"
+  local mb moved
+  mb=$(merge_base)
+  bindings_for_ref "$mb" "$up_path" >"$tmp/up-base.tsv" 2>/dev/null
+  moved=$(awk -F'\037' -v old="$tmp/up-base.tsv" '
+    BEGIN {
+      while ((getline line < old) > 0) {
+        split(line, f, "\037")
+        if (f[2] == "unbind") continue
+        base[f[1]] = f[3]
+      }
+    }
+    $2 != "unbind" {
+      if (!($1 in base)) print "new\037" $1 "\037" $3
+      else if (base[$1] != $3) print "changed\037" $1 "\037" base[$1] " -> " $3
+      seen[$1] = 1
+    }
+    END {
+      for (k in base) if (!(k in seen)) print "dropped\037" k "\037" base[k]
+    }
+  ' "$tmp/up.tsv" | sort)
+
+  if [[ -z $moved ]]; then
+    ok "no upstream keybinding changes"
+  else
+    local touched
+    touched=$(cut -d$'\037' -f1 "$tmp/fork.tsv" | sort -u)
+    local moved_key=0
+    while IFS=$'\037' read -r what key why; do
+      if grep -Fxq -- "$key" <<<"$touched"; then
+        moved_key=$((moved_key + 1))
+        bad "$key moved upstream and you override it -- $what: $why"
+      else
+        note "$what: $key -- $why"
+      fi
+    done <<<"$moved"
+    ((moved_key == 0)) && ok "none of the moved keys are ones you override"
+  fi
+}
+
+# --- drift -----------------------------------------------------------------
+
+cmd_drift() {
+  step "Upstream changes hiding behind your overrides"
+
+  [[ -n $stow_root ]] || { note "no stow package detected"; return; }
+
+  local mb shadowed=0 found=0 rel counterpart target
+  local missing_total=0 stale_total=0
+  mb=$(merge_base)
+
+  while IFS= read -r rel; do
+    target="$HOME/${rel#"$stow_root/"}"
+    [[ $(readlink -f "$target" 2>/dev/null) == "$repo_root_real/$rel" ]] || continue
+    counterpart=$(upstream_counterpart "$rel") || continue
+    upstream_has "$counterpart" || continue
+    shadowed=$((shadowed + 1))
+    drift_for_file "$rel" "$counterpart" "$mb"
+    missing_total=$((missing_total + DRIFT_MISSING))
+    stale_total=$((stale_total + DRIFT_STALE))
+  done < <(git ls-files -- "$stow_root")
+  found=$((missing_total + stale_total))
+
+  if ((shadowed == 0)); then
+    ok "no live override shadows a file upstream ships"
+    return
+  fi
+
+  note "$shadowed live override(s) shadow an upstream-shipped file"
+  if ((found == 0)); then
+    ok "none of them would miss an upstream change"
+  else
+    warn "$missing_total upstream code line(s) never reached your copies"
+    ((stale_total > 0)) && warn "$stale_total line(s) upstream removed are still in your copies"
+  fi
+}
+
+# Compare upstream's changes to a shipped file against the local override.
+# Sets DRIFT_MISSING and DRIFT_STALE for the caller.
+drift_for_file() {
+  local rel=$1 counterpart=$2 mb=$3
+  local local_file="$repo_root/$rel" missing=0 stale=0 line normalized
+  local added removed
+  DRIFT_MISSING=0
+  DRIFT_STALE=0
+
+  normalized="$tmp/normalized.$(printf '%s' "$rel" | tr '/. ' '___')"
+  sed 's/^[[:space:]]*//; s/[[:space:]]*$//' "$local_file" >"$normalized"
+
+  added=$(git diff -U0 "$mb" "$upstream_ref" -- "$counterpart" |
+    awk '/^\+[^+]/ { print substr($0, 2) }' |
+    grep -vE '^[[:space:]]*(--|$)')
+  removed=$(git diff -U0 "$mb" "$upstream_ref" -- "$counterpart" |
+    awk '/^-[^-]/ { print substr($0, 2) }' |
+    grep -vE '^[[:space:]]*(--|$)')
+
+  if [[ -z $added && -z $removed ]]; then
+    return 0
+  fi
+
+  substep "$rel  (overrides $counterpart)"
+
+  if [[ -n $added ]]; then
+    while IFS= read -r line; do
+      line=$(sed 's/^[[:space:]]*//; s/[[:space:]]*$//' <<<"$line")
+      [[ -n $line ]] || continue
+      if ! grep -Fqx -- "$line" "$normalized"; then
+        detail "missing upstream line:"
+        code "$line"
+        missing=$((missing + 1))
+      fi
+    done <<<"$added"
+  fi
+
+  if [[ -n $removed ]]; then
+    while IFS= read -r line; do
+      line=$(sed 's/^[[:space:]]*//; s/[[:space:]]*$//' <<<"$line")
+      [[ -n $line ]] || continue
+      if grep -Fqx -- "$line" "$normalized"; then
+        detail "upstream dropped this line, you still carry it:"
+        code "$line"
+        stale=$((stale + 1))
+      fi
+    done <<<"$removed"
+  fi
+
+  ((missing > 0)) && warn "$missing line(s) you never received"
+  ((stale > 0)) && warn "$stale line(s) upstream has removed"
+
+  DRIFT_MISSING=$missing
+  DRIFT_STALE=$stale
+}
+
+# --- doctor ----------------------------------------------------------------
+
+cmd_doctor() {
+  step "Hygiene checks"
+
+  [[ -n $stow_root ]] || { note "no stow package detected"; return; }
+
+  # 1. stow fidelity
+  if command -v stow >/dev/null 2>&1; then
+    local conflicts
+    conflicts=$(stow --simulate -t "$HOME" -d "$stow_root" . 2>&1 |
+      grep -iE 'CONFLICT|existing target is not owned' || true)
+    if [[ -z $conflicts ]]; then
+      ok "stow --simulate is clean"
+    else
+      warn "stow would conflict:"
+      printf '%s\n' "$conflicts" | head -10 | while IFS= read -r l; do detail "$l"; done
+    fi
+  else
+    warn "stow is not installed"
+  fi
+
+  # 2. refresh hazard: shipped user configs that are symlinked into the repo
+  #    (omarchy-refresh-config copies over $HOME/.config, and cp follows the
+  #    symlink, so it writes the new default straight into the fork).
+  local rel target counterpart hazards=0 commands=0
+  while IFS= read -r rel; do
+    target="$HOME/${rel#"$stow_root/"}"
+    [[ $(readlink -f "$target" 2>/dev/null) == "$repo_root_real/$rel" ]] || continue
+    counterpart=$(upstream_counterpart "$rel") || continue
+    upstream_has "$counterpart" || continue
+    case ${rel#"$stow_root/"} in
+      .config/*)
+        hazards=$((hazards + 1))
+        [[ $hazards -le 8 ]] && detail "${rel#"$stow_root/"}  <- omarchy-refresh-config would overwrite your copy"
+        ;;
+      .local/bin/*)
+        commands=$((commands + 1))
+        [[ $commands -le 8 ]] && detail "${rel#"$stow_root/"}  <- shadows the shipped $counterpart on PATH"
+        ;;
+    esac
+  done < <(git ls-files -- "$stow_root")
+
+  if ((hazards > 0)); then
+    warn "$hazards shipped config(s) are symlinks into this repo: running omarchy-refresh-config on them overwrites your fork's copy"
+  fi
+  if ((commands > 0)); then
+    warn "$commands command(s) of yours shadow a shipped command -- upstream fixes to those never reach you"
+  fi
+  # 3. tracked runtime state and large binaries
+  local big
+  big=$(git ls-files -s -- "$stow_root" | awk '$1 == "120000" { print "symlink\t" $4 }')
+  local large
+  large=$(git ls-files -z -- "$stow_root" | xargs -0 -r du -k 2>/dev/null |
+    awk '$1 > 512 { printf "%d KB\t%s\n", $1, $2 }' | sort -rn | head -10)
+  if [[ -n $large ]]; then
+    warn "large files tracked in the stow package:"
+    printf '%s\n' "$large" | while IFS=$'\t' read -r size path; do detail "$size  $path"; done
+  fi
+  local backups
+  backups=$(git ls-files -- "$stow_root" | grep -E '\.bak|\.orig$|~$' || true)
+  if [[ -n $backups ]]; then
+    warn "backup files tracked in the stow package:"
+    printf '%s\n' "$backups" | head -10 | while IFS= read -r l; do detail "$l"; done
+  fi
+
+  # 4. alias targets that no longer exist
+  local zshrc="$repo_root/$stow_root/.zshrc"
+  if [[ -f $zshrc ]]; then
+    local target_path
+    while IFS= read -r target_path; do
+      [[ -n $target_path ]] || continue
+      target_path=${target_path//\$HOME/$HOME}
+      target_path=${target_path/#\~/$HOME}
+      [[ $target_path == */* ]] || continue
+      target_path=${target_path%% *}
+      if [[ ! -e $target_path ]]; then
+        warn "alias target missing: $target_path"
+      fi
+    done < <(sed -nE 's/^[[:space:]]*alias [^=]+=//p' "$zshrc" | tr -d '\042'\047)
+  fi
+
+  # 5. autostart entries that duplicate or miss a binary
+  local autostart="$repo_root/$stow_root/.config/hypr/autostart.lua"
+  if [[ -f $autostart ]]; then
+    local up_autostart="$tmp/up-autostart.lua"
+    git show "$upstream_ref:$default_dir/hypr/autostart.lua" >"$up_autostart" 2>/dev/null
+    grep -oE 'o\.launch_on_start\("[^"]+"' "$autostart" 2>/dev/null |
+      sed -E 's/.*"([^"]+)"/\1/' | while IFS= read -r cmd; do
+        local bin=${cmd%% *}
+        if ! command -v "$bin" >/dev/null 2>&1; then
+          printf '  %s!%s autostart command not found: %s\n' "$C_YELLOW" "$C_RESET" "$cmd"
+        fi
+        if [[ -s $up_autostart ]] && grep -q "$bin" "$up_autostart"; then
+          printf '  %s!%s autostart may duplicate a default launch: %s\n' "$C_YELLOW" "$C_RESET" "$cmd"
+        fi
+      done
+  fi
+
+  # 6. uncommitted work in the stow package
+  local dirty
+  dirty=$(git status --porcelain -- "$stow_root")
+  if [[ -n $dirty ]]; then
+    warn "uncommitted changes in $stow_root:"
+    printf '%s\n' "$dirty" | head -10 | while IFS= read -r l; do detail "$l"; done
+  fi
+}
+
+# --- audit -----------------------------------------------------------------
+
+cmd_audit() {
+  printf '%s Omarchy fork audit %s\n' "$C_BOLD" "$C_RESET"
+  note "fork-sync $VERSION"
+  cmd_state
+  cmd_inventory
+  cmd_keybinds
+  cmd_drift
+  cmd_doctor
+  summary
+}
+
+summary() {
+  step "Summary"
+  if ((BLOCKERS > 0)); then
+    printf '  %s%d blocker(s), %d warning(s)%s\n' "$C_RED" "$BLOCKERS" "$WARNINGS" "$C_RESET"
+    return 2
+  elif ((WARNINGS > 0)); then
+    printf '  %s0 blockers, %d warning(s)%s\n' "$C_YELLOW" "$WARNINGS" "$C_RESET"
+    return 1
+  fi
+  printf '  %sclean%s\n' "$C_GREEN" "$C_RESET"
+  return 0
+}
+
+# --- merge -----------------------------------------------------------------
+
+cmd_merge() {
+  local allow_dirty=0
+  local arg
+  for arg in "$@"; do
+    case $arg in
+      --allow-dirty) allow_dirty=1 ;;
+      -h | --help) usage; exit 0 ;;
+      *) die "unknown option: $arg" ;;
+    esac
+  done
+
+  step "Merge $upstream_ref into $branch"
+
+  if [[ -n $(git status --porcelain --untracked-files=no) ]]; then
+    if ((allow_dirty)); then
+      warn "worktree is dirty; continuing because --allow-dirty was given"
+    else
+      bad "worktree is dirty -- commit or stash first, or pass --allow-dirty"
+      summary
+      return 2
+    fi
+  fi
+
+  substep "Fetching $upstream_remote"
+  if ! git fetch --prune "$upstream_remote"; then
+    bad "fetch failed"
+    summary
+    return 2
+  fi
+  ok "fetched"
+
+  if git rev-parse --verify --quiet "refs/remotes/$upstream_ref" >/dev/null ||
+    git rev-parse --verify --quiet "$upstream_ref" >/dev/null; then
+    ok "found $upstream_ref"
+  else
+    bad "$upstream_ref does not exist"
+    summary
+    return 2
+  fi
+
+  local behind ahead
+  read -r behind ahead < <(git rev-list --left-right --count "$upstream_ref...HEAD")
+  if ((behind == 0)); then
+    ok "already up to date"
+    summary
+    return 0
+  fi
+
+  substep "Checking for conflicts"
+  if ! merge_is_clean; then
+    bad "merge would conflict:"
+    git merge-tree --write-tree --name-only "$upstream_ref" HEAD 2>/dev/null |
+      tail -n +2 | while IFS= read -r l; do [[ -n $l ]] && detail "$l"; done
+    note "resolve on a throwaway branch, or merge by hand"
+    summary
+    return 2
+  fi
+  ok "conflict-free"
+
+  local backup="pre-merge-$(date +%Y%m%d-%H%M%S)"
+  git branch --quiet "$backup" HEAD && ok "backup branch: $backup"
+
+  substep "Merging $behind commit(s)"
+  if ! git merge --no-edit "$upstream_ref"; then
+    bad "merge failed -- restore with: git merge --abort (or git reset --hard $backup)"
+    summary
+    return 2
+  fi
+  ok "merged"
+
+  substep "Result"
+  read -r behind ahead < <(git rev-list --left-right --count "$upstream_ref...HEAD")
+  note "now $ahead commit(s) ahead, $behind behind"
+  note "dotfiles touched by upstream: $(git diff --name-only "$backup" HEAD -- "$stow_root" | wc -l)"
+
+  summary
+}
+
+# --- apply -----------------------------------------------------------------
+
+cmd_apply() {
+  local assume_yes=0
+  local arg
+  for arg in "$@"; do
+    case $arg in
+      --yes | -y) assume_yes=1 ;;
+      -h | --help) usage; exit 0 ;;
+      *) die "unknown option: $arg" ;;
+    esac
+  done
+
+  step "Apply"
+  [[ -n $stow_root ]] || die "no stow package detected"
+
+  substep "Plan"
+  note "restow $stow_root/ into \$HOME"
+  note "reload Hyprland"
+  command -v omarchy-restart-shell >/dev/null 2>&1 &&
+    note "restart the Omarchy shell"
+
+  if ((!assume_yes)); then
+    printf '\n  Proceed? [y/N] '
+    local reply
+    read -r reply
+    [[ $reply == [yY]* ]] || { note "aborted"; return 1; }
+  fi
+
+  if command -v stow >/dev/null 2>&1; then
+    if stow --restow --target="$HOME" --dir="$stow_root" .; then
+      ok "restowed $stow_root/"
+    else
+      bad "stow failed"
+      summary
+      return 2
+    fi
+  fi
+
+  if command -v hyprctl >/dev/null 2>&1 && [[ -n ${HYPRLAND_INSTANCE_SIGNATURE:-} ]]; then
+    if hyprctl reload >/dev/null 2>&1; then
+      ok "hyprctl reload"
+    else
+      warn "hyprctl reload failed"
+    fi
+  fi
+
+  if command -v omarchy-restart-shell >/dev/null 2>&1; then
+    if omarchy-restart-shell >/dev/null 2>&1; then
+      ok "omarchy shell restarted"
+    else
+      warn "omarchy-restart-shell failed"
+    fi
+  fi
+
+  note "package updates are separate: let omarchy-update / pacman -Syu run as usual"
+  summary
+}
+
+# --- main ------------------------------------------------------------------
+
+command=${1:-audit}
+shift || true
+
+case $command in
+  state) init && cmd_state && summary ;;
+  inventory) init && cmd_inventory && summary ;;
+  keybinds) init && cmd_keybinds && summary ;;
+  drift) init && cmd_drift && summary ;;
+  doctor) init && cmd_doctor && summary ;;
+  audit) init && cmd_audit ;;
+  merge) init && cmd_merge "$@" ;;
+  apply) init && cmd_apply "$@" ;;
+  version | --version) printf 'fork-sync %s\n' "$VERSION" ;;
+  help | -h | --help) usage ;;
+  *) usage; exit 2 ;;
+esac
