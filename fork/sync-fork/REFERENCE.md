@@ -114,9 +114,11 @@ them drift out of this list.
 1. **Two Quickshell processes run at once.** `autostart.lua` launches a bare
    `quickshell` (loading `~/.config/quickshell/shell.qml`, the JaKooLit
    overview) alongside Omarchy's own `quickshell -n -p $OMARCHY_PATH/shell`.
-   The overview is the reason; confirm that is worth running a second shell
-   framework, or port the overview into Omarchy's shell. Upstream's shell has no
-   overview of its own.
+   Upstream's shell has no overview of its own, so the second shell is
+   load-bearing — but it is a whole framework running for one feature and will
+   silently break if upstream changes its shell API. Decision on record:
+   leave it running, and investigate porting the overview into Omarchy's shell.
+   Verify with `pgrep -af quickshell` — two hits is expected, not a bug.
 2. **Runtime state tracked in git.** `dotfiles/.config/hypr/wallpaper_effects/`
    holds ~9 MB of wallpaper images that `.stow-local-ignore` stops Stow from
    linking — the tracked copies are dead weight. Same for
@@ -128,9 +130,16 @@ them drift out of this list.
 Resolved:
 
 - `SUPER + ALT + G` was double-bound to Google Messages while upstream used it
-  for "Move active window out of group". Fixed with `hl.unbind` first.
+  for "Move active window out of group". Fixed with `hl.unbind` first; verified
+  live with `hyprctl -j binds` — only one entry remains at `modmask` 72.
 - `.zshrc` aliased `recover`/`stower` to `~/.local/share/omarchy/personal/recover.sh`,
   which no longer exists anywhere; both aliases removed.
+
+## Sync log
+
+| Date | Upstream head | Result |
+| --- | --- | --- |
+| 2026-10-26 | `58858aecf` | 262 commits merged, 0 conflicts, 0 files touched under `dotfiles/`. Reconciliation: `SUPER + ALT + G` unbind, dead aliases dropped. |
 
 ## Sync state
 

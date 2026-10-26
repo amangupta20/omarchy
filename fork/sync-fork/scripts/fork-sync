@@ -309,6 +309,42 @@ drift_baseline() {
   merge_base
 }
 
+# The commit the installed Omarchy package was built from. Omarchy encodes it
+# in the package version, e.g. 4.0.0.r7246.g7a1960b-1 -> 7a1960b.
+installed_commit() {
+  local version
+  version=$(pacman -Q omarchy-dev 2>/dev/null | awk '{print $2}')
+  [[ -n $version ]] || version=$(pacman -Q omarchy 2>/dev/null | awk '{print $2}')
+  [[ -n $version ]] || return 0
+  sed -nE 's/.*\.g([0-9a-f]{7,40})(-[0-9]+)?$/\1/p' <<<"$version"
+}
+
+# Report how far the *running* Omarchy is behind what was just merged. Merging
+# the git fork never updates the live tree, so this is the gap that still needs
+# a package update.
+report_package_gap() {
+  local commit gap
+  command -v pacman >/dev/null 2>&1 || return 0
+  commit=$(installed_commit)
+  if [[ -z $commit ]]; then
+    note "cannot tell which commit the installed package was built from"
+    return 0
+  fi
+  if ! git cat-file -e "$commit^{commit}" 2>/dev/null; then
+    note "installed package commit $commit is not in this repository -- cannot compare"
+    return 0
+  fi
+  gap=$(git rev-list --count "$commit..$upstream_ref" 2>/dev/null)
+  if [[ -z $gap ]]; then
+    return 0
+  elif ((gap == 0)); then
+    ok "installed package is at $upstream_ref"
+  else
+    warn "installed package is built from $commit -- $gap commit(s) behind $upstream_ref"
+    detail "the merge changed git only; the running system updates via the package manager"
+  fi
+}
+
 # Merge without touching the worktree: returns 0 clean, 1 conflicts, 2 error.
 merge_is_clean() {
   git merge-tree --write-tree "$upstream_ref" HEAD >/dev/null 2>&1
@@ -444,6 +480,9 @@ cmd_state() {
       note "live tree OMARCHY_PATH=${OMARCHY_PATH:-unknown}"
     fi
   fi
+
+  substep "What is actually running"
+  report_package_gap
 }
 
 # --- inventory -------------------------------------------------------------
@@ -1084,6 +1123,7 @@ cmd_apply() {
   fi
 
   note "package updates are separate: let omarchy-update / pacman -Syu run as usual"
+  report_package_gap
   summary
 }
 

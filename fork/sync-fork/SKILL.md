@@ -62,6 +62,10 @@ a baseline audit: after the merge you cannot tell what was already broken.
 | Drift | Upstream code lines the fork's copies never received. Silent feature loss. |
 | Hygiene | Stow conflicts, refresh hazards, tracked runtime state, dangling references. |
 
+`state` also reports whether the *installed package* is behind upstream, which
+is a different question from whether the *branch* is: on a fork whose live tree
+comes from a package, a perfectly merged branch still runs old code.
+
 ### 3. Merge
 
 The fork must have a clean worktree. `fork-sync merge` refuses a dirty tree,
@@ -132,8 +136,9 @@ fork/sync-fork/scripts/fork-sync apply --yes    # unattended
 It re-stows the package, reloads Hyprland, and restarts the desktop shell.
 Package updates (the Omarchy runtime itself) are a *separate* mechanism — let
 `pacman -Syu` / the distro updater handle those. Do not assume merging the git
-fork updates the running system; check `REFERENCE.md` for how the live tree is
-installed on this machine.
+fork updates the running system: `apply` and `state` print the gap between the
+commit the installed package was built from and upstream's tip, and a merge that
+leaves a big gap means the code is in git but not on the desktop.
 
 ### 6. Verify
 
