@@ -98,6 +98,7 @@ upstream_remote=""
 upstream_branch=""
 upstream_ref=""
 stow_root=""
+sync_state=""
 default_dir=""
 cache_dir=""
 tmp=""
@@ -138,6 +139,7 @@ init() {
 
   stow_root=$(detect_stow_root)
   default_dir=$(detect_default_dir)
+  sync_state="$repo_root/fork/sync-fork/state/last-sync"
 }
 
 # The upstream is the remote this fork pulls from: a remote literally named
@@ -285,6 +287,27 @@ upstream_has() { git cat-file -e "$upstream_ref:$1" 2>/dev/null; }
 head_has() { git cat-file -e "HEAD:$1" 2>/dev/null; }
 
 merge_base() { git merge-base "$upstream_ref" HEAD; }
+
+# Where "what changed since your last sync" is measured from.
+#
+# Merging moves the fork's merge base up to upstream's tip, which would make
+# every "changed since your last sync" report collapse to nothing the moment the
+# merge lands -- exactly when you still need it to reconcile. So the merge
+# records upstream's tip in a small fork-only file and the reports measure from
+# there. Without the file (fresh clone, another machine) the merge base is the
+# same thing anyway.
+drift_baseline() {
+  local recorded
+  if [[ -f $sync_state ]]; then
+    recorded=$(sed -n 's/^upstream_head=//p' "$sync_state")
+    if [[ -n $recorded ]] && git cat-file -e "$recorded^{commit}" 2>/dev/null &&
+      git merge-base --is-ancestor "$recorded" "$upstream_ref" 2>/dev/null; then
+      printf '%s\n' "$recorded"
+      return 0
+    fi
+  fi
+  merge_base
+}
 
 # Merge without touching the worktree: returns 0 clean, 1 conflicts, 2 error.
 merge_is_clean() {
@@ -615,23 +638,37 @@ cmd_keybinds() {
 
   substep "Upstream bindings that moved since your last sync"
   local mb moved
-  mb=$(merge_base)
+  mb=$(drift_baseline)
   bindings_for_ref "$mb" "$up_path" >"$tmp/up-base.tsv" 2>/dev/null
   moved=$(awk -F'\037' -v old="$tmp/up-base.tsv" '
+    # A key can be bound more than once upstream (a window-level and a
+    # workspace-level action on the same chord), so compare the SET of
+    # descriptions per key rather than last-one-wins.
+    function adddesc(arr, k, d) {
+      if (d == "") return
+      if (!(k in arr)) { arr[k] = d; return }
+      n = split(arr[k], parts, "\034")
+      for (i = 1; i <= n; i++) if (parts[i] == d) return
+      arr[k] = arr[k] "\034" d
+    }
     BEGIN {
       while ((getline line < old) > 0) {
         split(line, f, "\037")
         if (f[2] == "unbind") continue
-        base[f[1]] = f[3]
+        adddesc(base, f[1], f[3])
+        base_seen[f[1]] = 1
       }
     }
     $2 != "unbind" {
-      if (!($1 in base)) print "new\037" $1 "\037" $3
-      else if (base[$1] != $3) print "changed\037" $1 "\037" base[$1] " -> " $3
-      seen[$1] = 1
+      adddesc(cur, $1, $3)
+      cur_seen[$1] = 1
     }
     END {
-      for (k in base) if (!(k in seen)) print "dropped\037" k "\037" base[k]
+      for (k in cur_seen) {
+        if (!(k in base_seen)) print "new\037" k "\037" cur[k]
+        else if (base[k] != cur[k]) print "changed\037" k "\037" base[k] " -> " cur[k]
+      }
+      for (k in base_seen) if (!(k in cur_seen)) print "dropped\037" k "\037" base[k]
     }
   ' "$tmp/up.tsv" | sort)
 
@@ -662,7 +699,7 @@ cmd_drift() {
 
   local mb shadowed=0 found=0 rel counterpart target
   local missing_total=0 stale_total=0
-  mb=$(merge_base)
+  mb=$(drift_baseline)
 
   while IFS= read -r rel; do
     target="$HOME/${rel#"$stow_root/"}"
@@ -945,17 +982,48 @@ cmd_merge() {
   git branch --quiet "$backup" HEAD && ok "backup branch: $backup"
 
   substep "Merging $behind commit(s)"
-  if ! git merge --no-edit "$upstream_ref"; then
+  # --quiet keeps git's full diffstat (thousands of lines on a big sync) out of
+  # the output; the compact summary below is what a reader actually needs.
+  local merge_log="$tmp/merge.log"
+  if ! git merge --no-edit --quiet "$upstream_ref" >"$merge_log" 2>&1; then
     bad "merge failed -- restore with: git merge --abort (or git reset --hard $backup)"
+    [[ -s $merge_log ]] && tail -20 "$merge_log" | while IFS= read -r l; do detail "$l"; done
     summary
     return 2
   fi
-  ok "merged"
+  ok "merged $behind commit(s)"
 
   substep "Result"
   read -r behind ahead < <(git rev-list --left-right --count "$upstream_ref...HEAD")
   note "now $ahead commit(s) ahead, $behind behind"
-  note "dotfiles touched by upstream: $(git diff --name-only "$backup" HEAD -- "$stow_root" | wc -l)"
+
+  local touched
+  touched=$(git diff --name-only "$backup" HEAD -- "$stow_root" | wc -l)
+  if ((touched == 0)); then
+    ok "upstream did not touch $stow_root/ -- every local modification survived"
+  else
+    warn "upstream touched $touched file(s) under $stow_root/ -- reconcile them before applying"
+    git diff --name-only "$backup" HEAD -- "$stow_root" | head -20 | while IFS= read -r l; do detail "$l"; done
+  fi
+
+  note "biggest areas changed by the merge:"
+  git diff --name-only "$backup" HEAD | cut -d/ -f1 | sort | uniq -c | sort -rn | head -6 |
+    while read -r count area; do detail "$count  $area"; done
+
+  note "backup branch: $backup"
+
+  # Record where this sync landed, so the next audit measures "what changed
+  # since your last sync" from here rather than from the just-advanced merge base.
+  mkdir -p "$(dirname "$sync_state")"
+  {
+    printf 'upstream_head=%s\n' "$(git rev-parse "$upstream_ref")"
+    printf 'upstream_ref=%s\n' "$upstream_ref"
+    printf 'merged_at=%s\n' "$(date -Iseconds)"
+    printf 'branch=%s\n' "$branch"
+  } >"$sync_state"
+  ok "recorded sync point in ${sync_state#"$repo_root/"}"
+
+  note "next: fork-sync audit, then reconcile, then fork-sync apply"
 
   summary
 }

@@ -72,6 +72,18 @@ only then merges:
 fork/sync-fork/scripts/fork-sync merge
 ```
 
+It prints a compact result: how far ahead the fork now is, what areas changed,
+and whether upstream touched the Stow package at all (it should not — that is
+the property that makes these merges conflict-free). The full `git merge`
+diffstat is suppressed on purpose; on a long gap it is thousands of lines of
+noise.
+
+Note that `drift` and the "bindings that moved" report in `keybinds` are
+*pre-merge* reports: they measure from the last recorded sync point. Run them
+before merging. `fork/sync-fork/state/last-sync` holds that point, so the
+reports stay meaningful after the merge too — but the merge itself is what
+advances it.
+
 If it reports a conflict, do not hand-resolve blindly. The usual cause is a
 local commit reaching outside the Stow package — find it with
 `git diff --name-only $(git merge-base HEAD upstream/<branch>) HEAD`, move that
@@ -151,6 +163,9 @@ new known issue. The next run starts from this record instead of re-deriving it.
   branch to upstream. The Stow package is the fork's whole value.
 - **Never** keep local edits outside the Stow package. That is the one thing
   that turns a conflict-free merge into a conflicted one.
+- **Never** edit the tracked `.gitignore` to hide local state. Put it in
+  `.git/info/exclude` instead — `.gitignore` is an upstream-shipped file, so
+  editing it is exactly the merge risk this procedure exists to avoid.
 - **Never** merge with a dirty worktree; the backup branch would capture a state
   that does not exist anywhere else.
 - Do not delete a deviation just because upstream moved something nearby. Ask

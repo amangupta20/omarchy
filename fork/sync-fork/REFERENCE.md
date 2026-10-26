@@ -102,30 +102,52 @@ Replaced upstream defaults (each preceded by `hl.unbind`):
 Unbound with no replacement: `SUPER + C`, `SUPER + X`.
 
 Fork-only: `SUPER + B`, `SUPER + D`, `SUPER + E`, `SUPER + N`, `SUPER + Y`,
-`SUPER + ALT + G`.
+`SUPER + ALT + G` (after `hl.unbind`, because upstream uses that chord for
+"Move active window out of group"; upstream's own Google Messages binding is
+`SUPER + SHIFT + CTRL + G`).
 
 ## Known issues
 
 Standing problems that the audit reports. Fix or explicitly accept; do not let
 them drift out of this list.
 
-1. **`SUPER + ALT + G` is double-bound.** The fork binds Google Messages without
-   unbinding upstream's "Move active window out of group". Needs `hl.unbind`
-   first, or a different key.
-2. **Two Quickshell processes run at once.** `autostart.lua` launches a bare
+1. **Two Quickshell processes run at once.** `autostart.lua` launches a bare
    `quickshell` (loading `~/.config/quickshell/shell.qml`, the JaKooLit
    overview) alongside Omarchy's own `quickshell -n -p $OMARCHY_PATH/shell`.
    The overview is the reason; confirm that is worth running a second shell
-   framework, or port the overview into Omarchy's shell.
-3. **Stale aliases.** `.zshrc` defines `recover` and `stower` pointing at
-   `~/.local/share/omarchy/personal/recover.sh`, which does not exist.
-4. **Runtime state tracked in git.** `dotfiles/.config/hypr/wallpaper_effects/`
+   framework, or port the overview into Omarchy's shell. Upstream's shell has no
+   overview of its own.
+2. **Runtime state tracked in git.** `dotfiles/.config/hypr/wallpaper_effects/`
    holds ~9 MB of wallpaper images that `.stow-local-ignore` stops Stow from
    linking — the tracked copies are dead weight. Same for
    `dotfiles/.config/fastfetch/config.jsonc.bak.1764780780`.
-5. **`omarchy-refresh-config` is unsafe on any stowed file.** It `cp`s upstream's
+3. **`omarchy-refresh-config` is unsafe on any stowed file.** It `cp`s upstream's
    default over `~/.config/...`, which is a symlink here, so the write lands in
    the fork. Never run it on the six shadowed `hypr/*.lua` files.
+
+Resolved:
+
+- `SUPER + ALT + G` was double-bound to Google Messages while upstream used it
+  for "Move active window out of group". Fixed with `hl.unbind` first.
+- `.zshrc` aliased `recover`/`stower` to `~/.local/share/omarchy/personal/recover.sh`,
+  which no longer exists anywhere; both aliases removed.
+
+## Sync state
+
+`fork/sync-fork/state/last-sync` records the upstream commit the fork last
+merged. `fork-sync drift` and the "bindings that moved" report measure from
+there, not from the merge base — otherwise a merge would advance the merge base
+to upstream's tip and collapse those reports to nothing exactly when they are
+still needed for reconciliation. `fork-sync merge` rewrites the file; commit it
+with the merge commit.
+
+## Local-only ignores
+
+Untracked local state (`.power/`, editor droppings) belongs in
+`.git/info/exclude`, never in the tracked `.gitignore`. Editing `.gitignore`
+would be a modification to an upstream-shipped file, which is the one thing
+that turns a conflict-free merge into a conflicted one. `.power/` is excluded
+this way today.
 
 ## Re-deriving the mechanical facts
 
