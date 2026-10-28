@@ -140,6 +140,7 @@ Resolved:
 | Date | Upstream head | Result |
 | --- | --- | --- |
 | 2026-10-26 | `58858aecf` | 262 commits merged, 0 conflicts, 0 files touched under `dotfiles/`. Reconciliation: `SUPER + ALT + G` unbind, dead aliases dropped. |
+| 2026-10-28 | `600ca8866` | 54 commits merged, 0 conflicts, 0 files touched under `dotfiles/`. Reconciliation: no action — `SUPER + comma` / `SUPER + ALT + comma` notification swap and Omasnap overlay fix flow through (files not shadowed); 7 `bin/` updates, none shadowed. |
 
 ## Sync state
 
