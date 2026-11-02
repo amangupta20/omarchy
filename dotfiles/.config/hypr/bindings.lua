@@ -63,3 +63,21 @@ o.bind("SUPER + E", "Email", { webapp = "https://app.hey.com" })
 o.bind("SUPER + Y", "YouTube", { webapp = "https://youtube.com/", focus = true })
 o.bind("SUPER + ALT + G", "Google Messages", { webapp = "https://messages.google.com/web/conversations", focus = true })
 o.bind("SUPER + SHIFT + X", "X Post", { webapp = "https://x.com/compose/post" })
+
+-- SUPER + SHIFT + TAB jumps back to the previously focused window (pressing it
+-- again flips back), instead of Omarchy's previous workspace. Scratchpads and
+-- minimized windows (special workspaces) are skipped.
+hl.unbind("SUPER + SHIFT + TAB")
+o.bind("SUPER + SHIFT + TAB", "Previous window", function()
+  local previous
+  for _, window in ipairs(hl.get_windows({ mapped = true })) do
+    local active = window.workspace and not window.workspace.special and not window.hidden
+    if active and window.focus_history_id > 0 and (not previous or window.focus_history_id < previous.focus_history_id) then
+      previous = window
+    end
+  end
+  if previous then
+    hl.dispatch(hl.dsp.focus({ window = "address:" .. previous.address }))
+    hl.dispatch(hl.dsp.window.bring_to_top())
+  end
+end)
