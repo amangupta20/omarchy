@@ -1,0 +1,12 @@
+[Unit]
+Description=Temperature-driven fan curve for the Acer Nitro (linuwu_sense)
+
+[Service]
+ExecStart=%h/.local/bin/acer-fan-curve
+# If the script is killed hard, never leave the fans pinned at a manual duty.
+ExecStopPost=/bin/sh -c 'echo 0,0 > /sys/devices/platform/acer-wmi/nitro_sense/fan_speed'
+Restart=always
+RestartSec=3
+
+[Install]
+WantedBy=default.target

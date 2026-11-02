@@ -1,0 +1,100 @@
+#!/bin/bash
+# Fan curve for the Acer Nitro AN515-58 through linuwu_sense.
+#
+# In auto mode the EC keeps both fans near 3.5-4k RPM even with the CPU in the
+# 90s, while NitroSense on Windows takes them to 7k+. linuwu_sense accepts a
+# manual duty per fan ("cpu,gpu" percent, 0,0 = back to EC auto), so this
+# drives both fans from the hotter of the CPU package and the dGPU.
+#
+# Temperatures have no change signal, so this polls every 2 s. The dGPU is only
+# queried while it is already awake: nvidia-smi on a runtime-suspended GPU
+# would wake it.
+#
+# Every 5 s it appends a CSV line to $LOG with a synced write, so the readings
+# just before a sudden power-off survive btrfs' 30 s commit window.
+
+set -uo pipefail
+
+FAN=/sys/devices/platform/acer-wmi/nitro_sense/fan_speed
+GPU_PM=/sys/bus/pci/devices/0000:01:00.0/power/runtime_status
+LOG_DIR=${XDG_STATE_HOME:-$HOME/.local/state}/acer-fan-curve
+LOG=$LOG_DIR/temps.csv
+LOG_MAX_BYTES=$(( 5 * 1024 * 1024 ))
+HYSTERESIS=5
+
+hwmon() {
+  local h
+  for h in /sys/class/hwmon/hwmon*; do
+    if [[ $(<"$h/name") == "$1" ]]; then
+      echo "$h"
+      return
+    fi
+  done
+}
+
+CORETEMP=$(hwmon coretemp)
+ACER=$(hwmon acer)
+
+# Temperature (C) -> duty percent; 0 hands the fans back to the EC.
+duty_for() {
+  local t=$1
+  if (( t >= 85 )); then echo 100
+  elif (( t >= 75 )); then echo 75
+  elif (( t >= 65 )); then echo 55
+  elif (( t >= 55 )); then echo 40
+  else echo 0
+  fi
+}
+
+restore_auto() {
+  echo 0,0 > "$FAN" 2>/dev/null
+}
+trap 'restore_auto; exit 0' EXIT INT TERM
+
+mkdir -p "$LOG_DIR"
+[[ -s $LOG ]] || echo "time,cpu_c,gpu_c,duty,cpu_rpm,gpu_rpm" > "$LOG"
+
+gpu=0
+tick=0
+duty=0
+
+while true; do
+  cpu=$(( $(<"$CORETEMP/temp1_input") / 1000 ))
+
+  if (( tick % 3 == 0 )); then
+    if [[ $(<"$GPU_PM") == "active" ]]; then
+      gpu=$(nvidia-smi --query-gpu=temperature.gpu --format=csv,noheader,nounits 2>/dev/null || echo 0)
+      [[ $gpu =~ ^[0-9]+$ ]] || gpu=0
+    else
+      gpu=0
+    fi
+  fi
+
+  hot=$(( cpu > gpu ? cpu : gpu ))
+  want=$(duty_for "$hot")
+
+  # Only step down once the temperature is HYSTERESIS below the band edge.
+  if (( want < duty )); then
+    want=$(duty_for $(( hot + HYSTERESIS )))
+  fi
+  duty=$want
+
+  # Compare with the file rather than a cached value: resume and linuwu's
+  # own restores can put it back to auto behind our back.
+  if [[ $(<"$FAN") != "$duty,$duty" ]]; then
+    echo "$duty,$duty" > "$FAN" 2>/dev/null || logger -t acer-fan-curve "could not set fans to $duty%"
+  fi
+
+  if (( tick % 5 == 0 )); then
+    if (( $(stat -c %s "$LOG") > LOG_MAX_BYTES )); then
+      mv -f "$LOG" "$LOG.1"
+      echo "time,cpu_c,gpu_c,duty,cpu_rpm,gpu_rpm" > "$LOG"
+    fi
+    printf '%s,%d,%d,%d,%s,%s\n' "$(date +%FT%T)" "$cpu" "$gpu" "$duty" \
+      "$(<"$ACER/fan1_input")" "$(<"$ACER/fan2_input")" |
+      dd of="$LOG" oflag=append,dsync conv=notrunc status=none
+  fi
+
+  (( tick++ ))
+  sleep 2
+done
