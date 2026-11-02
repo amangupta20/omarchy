@@ -57,10 +57,10 @@ comment templates, so drift is usually silent rather than harmful — but check
 | --- | --- | --- |
 | `hypr/hyprland.lua` | sets `OMARCHY_BACKLIGHT_PATH` to `~/.config/omarchy/backlight` before requiring the defaults | Hybrid graphics: Omarchy picks the wrong backlight node when the dGPU also exposes one. |
 | `hypr/autostart.lua` | launches `quickshell` and `wl-clip-persist --clipboard regular --reconnect-tries inf` | `quickshell` backs the SUPER+A overview (see below); `wl-clip-persist` keeps the clipboard source alive so Omarchy's clipboard history still captures after the copying app exits. |
-| `hypr/bindings.lua` | replaces 11 upstream defaults, adds 5 fork-only keys | Personal layout. See the keybinding table below. |
+| `hypr/bindings.lua` | replaces upstream defaults incl. `SUPER + SHIFT + TAB`, adds fork-only keys | Personal layout. See the keybinding table below. |
 | `hypr/input.lua` | `repeat_delay = 600`; touchpad `natural_scroll`, `scroll_factor = 0.4`; per-device sensitivity `-0.35` for `instant-usb-gaming-mouse-` | Personal feel. Note it *drops* upstream's `kb_layout`, `repeat_rate`, `numlock_by_default`, `sensitivity`, `accel_profile`, `clickfinger_behavior`, `disable_while_typing`, `drag_3fg`. |
 | `hypr/looknfeel.lua` | `gaps_in = 1`, `gaps_out = 2`, `border_size = 2`; `cursor.no_hardware_cursors`, `cursor.use_cpu_buffer`; `xwayland.force_zero_scaling`; `XCURSOR_THEME`/`HYPRCURSOR_THEME` = `Adwaita` | Visible gaps; hardware cursor renders blank under fractional scaling; XWayland apps misjudge cursor size/position. |
-| `hypr/monitors.lua` | `scale = 1.25`, `GDK_SCALE = 1.25` | 1.25 fractional scaling on this panel. |
+| `hypr/monitors.lua` | `scale = 1.25`, `GDK_SCALE = 1.25` on top of upstream's monitor-panel template | 1.25 fractional scaling on this panel; template ported from upstream `b083e16a7` so panel docs stay current. |
 | `environment.d/backlight.conf` | `OMARCHY_BACKLIGHT_PATH=...` | Same value as `hyprland.lua` sets; kept so non-Hyprland consumers see it too. |
 | `omarchy/backlight/acpi_video1` | symlink → `/sys/class/backlight/acpi_video1` | The directory the backlight override points at, holding only the Intel iGPU node. |
 
@@ -82,6 +82,7 @@ These cannot drift, but they can break against removed upstream commands.
 | `.config/fastfetch/` | fetch configs |
 | `.config/quickshell/` | JaKooLit overview/search shell, launched by `autostart.lua`; provides the `quickshell:overviewToggle` global shortcut |
 | `.config/hypr/UserScripts/` | JaKooLit wallpaper/rofi helper scripts, called from `bindings.lua` |
+| `.local/bin/acer-fan-curve` + `.config/systemd/user/acer-fan-curve.service` | temperature-driven fan curve for the Acer Nitro AN515-58 via `linuwu_sense` | EC holds fans low while CPU hits 90s; polls temps (no change signal exists), drives both fans from hotter of CPU/dGPU, restores EC auto on exit |
 
 ### Keybinding map
 
@@ -98,6 +99,7 @@ Replaced upstream defaults (each preceded by `hl.unbind`):
 | `SUPER + SHIFT + B` | Browser | Browser (private) |
 | `SUPER + SHIFT + A` | ChatGPT | Grok |
 | `SUPER + SHIFT + X` | X | X Post |
+| `SUPER + SHIFT + TAB` | Previous workspace | Previous window (focus-history, skips special workspaces) |
 
 Unbound with no replacement: `SUPER + C`, `SUPER + X`.
 
@@ -142,6 +144,7 @@ Resolved:
 | 2026-10-26 | `58858aecf` | 262 commits merged, 0 conflicts, 0 files touched under `dotfiles/`. Reconciliation: `SUPER + ALT + G` unbind, dead aliases dropped. |
 | 2026-10-28 | `600ca8866` | 54 commits merged, 0 conflicts, 0 files touched under `dotfiles/`. Reconciliation: no action — `SUPER + comma` / `SUPER + ALT + comma` notification swap and Omasnap overlay fix flow through (files not shadowed); 7 `bin/` updates, none shadowed. |
 | 2026-10-31 | `bda3aaf69` | 74 commits merged, 0 conflicts, 0 files touched under `dotfiles/`. Reconciliation: no action — no keybinding changes upstream, no drift in the 7 shadowed files. Semantic pass: dropped the fork's 3-finger horizontal `workspace` gesture from `input.lua` — upstream now ships 3-finger left/right workspace gestures (`default/hypr/gestures.lua`) and Hyprland rejects a second gesture on the same fingers/direction. `omarchy-hyprland-monitor-scaling` now writes per-monitor rules through the `monitors.lua` symlink into `dotfiles/` — expect repo diffs after scaling changes. |
+| 2026-11-02 | `cf659d607` | 115 commits merged, 0 conflicts, 0 files touched under `dotfiles/`. Reconciliation: pre-merge local work committed first (SUPER+SHIFT+TAB previous-window, monitors.lua panel-template port keeping 1.25, new acer-fan-curve + service); post-merge `keybinds`/`drift` clean — upstream dictation (`ALT+SPACE`, dropped `F9`/`SUPER+CTRL+X`) and `XF86Display` keys flow through, `monitors.lua` 2 removed lines already ported, `omarchy-theme-bg-switcher` untouched upstream. |
 
 ## Sync state
 
@@ -157,8 +160,8 @@ with the merge commit.
 Untracked local state (`.power/`, editor droppings) belongs in
 `.git/info/exclude`, never in the tracked `.gitignore`. Editing `.gitignore`
 would be a modification to an upstream-shipped file, which is the one thing
-that turns a conflict-free merge into a conflicted one. `.power/` is excluded
-this way today.
+that turns a conflict-free merge into a conflicted one. `.power/` and
+`dotfiles/.config/hypr/monitors.lua.bak*` are excluded this way today.
 
 ## Re-deriving the mechanical facts
 
