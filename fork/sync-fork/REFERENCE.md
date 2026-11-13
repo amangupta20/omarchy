@@ -94,7 +94,7 @@ Replaced upstream defaults (each preceded by `hl.unbind`):
 | `SUPER + A` | Select all | Workspace overview (`quickshell:overviewToggle`) |
 | `SUPER + W` | Close window | Wallpaper selector (`UserScripts/WallpaperSelect.sh`) |
 | `SUPER + SHIFT + W` | Omawrite | Wallpaper effects (`UserScripts/WallpaperEffects.sh`) |
-| `SUPER + F` | Full screen | File manager (nautilus) |
+| `SUPER + F` | Full screen | File manager (Folio, via `{ omarchy = "files" }`) |
 | `SUPER + SHIFT + F` | File manager | Full screen |
 | `SUPER + SHIFT + B` | Browser | Browser (private) |
 | `SUPER + SHIFT + A` | ChatGPT | Grok |
@@ -128,18 +128,14 @@ them drift out of this list.
 3. **`omarchy-refresh-config` is unsafe on any stowed file.** It `cp`s upstream's
    default over `~/.config/...`, which is a symlink here, so the write lands in
    the fork. Never run it on the six shadowed `hypr/*.lua` files.
-4. **Next `omarchy-dev` package update removes Nautilus — fork's `SUPER + F` will
-   break then.** Upstream `795dfb234` replaced Nautilus with Folio (Files) and
-   migration `1794330979` uninstalls `nautilus`/`sushi` on update. The fork's
-   `bindings.lua` hardcodes `uwsm app -- nautilus --new-window` on `SUPER + F`,
-   the only nautilus reference left in `dotfiles/`. After the package updates
-   past that migration, switch the bind to `{ omarchy = "files" }` (upstream's
-   new dispatcher, same as its `SUPER + SHIFT + F`). Do NOT switch before the
-   update: `omarchy-launch-files` does not exist in the installed package yet,
-   so switching early breaks `SUPER + F` today.
-
 Resolved:
 
+- **Nautilus removal (2026-11-13).** Upstream `795dfb234` + migration `1794330979`
+  removed Nautilus during the package update to `3f974d011`, as predicted. Fork's
+  `SUPER + F` switched from hardcoded `nautilus --new-window` to
+  `{ omarchy = "files" }` (upstream's dispatcher); verified live with
+  `hyprctl binds`. The switch waited for the update because
+  `omarchy-launch-files` did not exist in the previously installed package.
 - `SUPER + ALT + G` was double-bound to Google Messages while upstream used it
   for "Move active window out of group". Fixed with `hl.unbind` first; verified
   live with `hyprctl -j binds` — only one entry remains at `modmask` 72.
