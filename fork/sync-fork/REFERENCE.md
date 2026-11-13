@@ -128,6 +128,15 @@ them drift out of this list.
 3. **`omarchy-refresh-config` is unsafe on any stowed file.** It `cp`s upstream's
    default over `~/.config/...`, which is a symlink here, so the write lands in
    the fork. Never run it on the six shadowed `hypr/*.lua` files.
+4. **Next `omarchy-dev` package update removes Nautilus — fork's `SUPER + F` will
+   break then.** Upstream `795dfb234` replaced Nautilus with Folio (Files) and
+   migration `1794330979` uninstalls `nautilus`/`sushi` on update. The fork's
+   `bindings.lua` hardcodes `uwsm app -- nautilus --new-window` on `SUPER + F`,
+   the only nautilus reference left in `dotfiles/`. After the package updates
+   past that migration, switch the bind to `{ omarchy = "files" }` (upstream's
+   new dispatcher, same as its `SUPER + SHIFT + F`). Do NOT switch before the
+   update: `omarchy-launch-files` does not exist in the installed package yet,
+   so switching early breaks `SUPER + F` today.
 
 Resolved:
 
@@ -148,6 +157,7 @@ Resolved:
 | 2026-11-06 | `d5b32d24d` | 45 commits merged, 0 conflicts, 0 files touched under `dotfiles/`. Reconciliation: no action — post-merge `keybinds`/`drift` clean; upstream `CTRL + XF86MonBrightnessUp/Down` keyboard-backlight keys and `default/hypr/autostart.lua` software-rendering line flow through (files not shadowed); 37 `bin/` updates, none shadowed. |
 | 2026-11-09 | `cbd0029fd` | 32 commits merged, 0 conflicts, 0 files touched under `dotfiles/`. Reconciliation: no action — post-merge `keybinds`/`drift` clean; upstream glassy-every-window (`default/hypr/*`, `bin/omarchy-hyprland-window-transparency`, `bin/omarchy-theme-set-glass`) and Herdr Desktop keymap (`keys.json`, not Hyprland bindings) flow through (files not shadowed); `bin/omarchy-theme-bg-switcher` and all 6 shipped `config/hypr/*.lua` counterparts untouched upstream. Installed `omarchy-dev` package already at `cbd0029`, so runtime matches the merge. |
 | 2026-11-10 | `df3d01ce8` | 13 commits merged, 0 conflicts, 0 files touched under `dotfiles/`. Reconciliation: no action — post-merge `keybinds`/`drift` clean. Upstream dropped the blank startup cursor (`default/hypr/startup-cursor.lua` deleted, `autostart.lua` no longer swaps `XCURSOR_*`), which no longer competes with the fork's `Adwaita` cursor envs in `looknfeel.lua`; `QT_QPA_PLATFORMTHEME` moved `gtk3` → `qtengine` in `default/hypr/envs.lua` (fork sets no Qt envs; migration `1792902457` installs `qtengine`). 13 `bin/` updates, none shadowed. Installed `omarchy-dev` still at `cbd0029` — runtime is 13 commits behind until the package updates. |
+| 2026-11-13 | `3f974d011` | 194 commits merged, 0 conflicts, 0 files touched under `dotfiles/`. Reconciliation: pre-merge local work committed first (SUPER+SHIFT+TAB previous-window function → `previous_per_monitor`, register updated); the `o.rebind` spelling tripped `fork-sync keybinds` (checker only credits `hl.unbind`), so normalized to `hl.unbind` + `o.bind` — behavior-identical, audit green. Post-merge `keybinds`/`drift` clean; upstream Agents panel (`SUPER + CTRL + X`) and Files-as-file-manager dispatcher flow through (fork overrides neither chord). 50 `bin/` updates, none shadowed (`omarchy-theme-bg-switcher` untouched). Pending: Nautilus removal on next package update (known issue 4). Installed `omarchy-dev` still at `df3d01c` — runtime is 194 commits behind until the package updates. |
 
 ## Sync state
 
