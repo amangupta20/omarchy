@@ -94,7 +94,7 @@ Replaced upstream defaults (each preceded by `hl.unbind`):
 | `SUPER + A` | Select all | Workspace overview (`quickshell:overviewToggle`) |
 | `SUPER + W` | Close window | Wallpaper selector (`UserScripts/WallpaperSelect.sh`) |
 | `SUPER + SHIFT + W` | Omawrite | Wallpaper effects (`UserScripts/WallpaperEffects.sh`) |
-| `SUPER + F` | Full screen | File manager (Folio, via `{ omarchy = "files" }`) |
+| `SUPER + F` | Full screen | File manager (COSMIC Files, `cosmic-files`) |
 | `SUPER + SHIFT + F` | File manager | Full screen |
 | `SUPER + SHIFT + B` | Browser | Browser (private) |
 | `SUPER + SHIFT + A` | ChatGPT | Grok |
@@ -131,11 +131,14 @@ them drift out of this list.
 Resolved:
 
 - **Nautilus removal (2026-11-13).** Upstream `795dfb234` + migration `1794330979`
-  removed Nautilus during the package update to `3f974d011`, as predicted. Fork's
-  `SUPER + F` switched from hardcoded `nautilus --new-window` to
-  `{ omarchy = "files" }` (upstream's dispatcher); verified live with
-  `hyprctl binds`. The switch waited for the update because
-  `omarchy-launch-files` did not exist in the previously installed package.
+  removed Nautilus during the package update to `3f974d011`, as predicted. Fork
+  briefly pointed `SUPER + F` at `{ omarchy = "files" }` (verified live), then
+  the user chose COSMIC Files as the daily manager: `SUPER + F` now runs
+  `cosmic-files`, `inode/directory` in `~/.config/mimeapps.list` points at
+  `com.system76.CosmicFiles.desktop`. No dock pin to change (personal
+  `shell.json` has no dock section). COSMIC theming stays COSMIC's own — dark
+  mode + blue accent via the `cosmic-settings` Appearance page is the closest
+  match to the Catppuccin Omarchy theme; there is no config-file theme bridge.
 - `SUPER + ALT + G` was double-bound to Google Messages while upstream used it
   for "Move active window out of group". Fixed with `hl.unbind` first; verified
   live with `hyprctl -j binds` — only one entry remains at `modmask` 72.
