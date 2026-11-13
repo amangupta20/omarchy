@@ -99,7 +99,7 @@ Replaced upstream defaults (each preceded by `hl.unbind`):
 | `SUPER + SHIFT + B` | Browser | Browser (private) |
 | `SUPER + SHIFT + A` | ChatGPT | Grok |
 | `SUPER + SHIFT + X` | X | X Post |
-| `SUPER + SHIFT + TAB` | Previous workspace | Previous window (focus-history, skips special workspaces) |
+| `SUPER + SHIFT + TAB` | Previous workspace | Last used workspace on this monitor (press again to flip back) |
 
 Unbound with no replacement: `SUPER + C`, `SUPER + X`.
 
