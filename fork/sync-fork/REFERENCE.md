@@ -94,7 +94,7 @@ Replaced upstream defaults (each preceded by `hl.unbind`):
 | `SUPER + A` | Select all | Workspace overview (`quickshell:overviewToggle`) |
 | `SUPER + W` | Close window | Wallpaper selector (`UserScripts/WallpaperSelect.sh`) |
 | `SUPER + SHIFT + W` | Omawrite | Wallpaper effects (`UserScripts/WallpaperEffects.sh`) |
-| `SUPER + F` | Full screen | File manager (COSMIC Files, `cosmic-files`) |
+| `SUPER + F` | Full screen | File manager (Nautilus, deliberately kept — see below) |
 | `SUPER + SHIFT + F` | File manager | Full screen |
 | `SUPER + SHIFT + B` | Browser | Browser (private) |
 | `SUPER + SHIFT + A` | ChatGPT | Grok |
@@ -130,15 +130,16 @@ them drift out of this list.
    the fork. Never run it on the six shadowed `hypr/*.lua` files.
 Resolved:
 
-- **Nautilus removal (2026-11-13).** Upstream `795dfb234` + migration `1794330979`
-  removed Nautilus during the package update to `3f974d011`, as predicted. Fork
-  briefly pointed `SUPER + F` at `{ omarchy = "files" }` (verified live), then
-  the user chose COSMIC Files as the daily manager: `SUPER + F` now runs
-  `cosmic-files`, `inode/directory` in `~/.config/mimeapps.list` points at
-  `com.system76.CosmicFiles.desktop`. No dock pin to change (personal
-  `shell.json` has no dock section). COSMIC theming stays COSMIC's own — dark
-  mode + blue accent via the `cosmic-settings` Appearance page is the closest
-  match to the Catppuccin Omarchy theme; there is no config-file theme bridge.
+- **Nautilus removal (2026-11-13) — user kept Nautilus.** Upstream `795dfb234` +
+  migration `1794330979` removed Nautilus during the package update to
+  `3f974d011`. The user tried Folio, Dolphin and COSMIC Files and chose to
+  stay on Nautilus: package reinstalled explicitly (`omarchy-pkg-add nautilus`),
+  so the one-shot migration will not remove it again. `SUPER + F` runs
+  `nautilus --new-window`, `inode/directory` in `~/.config/mimeapps.list` is
+  back to `org.gnome.Nautilus.desktop`. Standing deviation: upstream
+  file-manager integration (dispatcher, previews, sharing) now targets Folio
+  and will not flow to Nautilus; future migrations touching Nautilus need a
+  manual check.
 - `SUPER + ALT + G` was double-bound to Google Messages while upstream used it
   for "Move active window out of group". Fixed with `hl.unbind` first; verified
   live with `hyprctl -j binds` — only one entry remains at `modmask` 72.
