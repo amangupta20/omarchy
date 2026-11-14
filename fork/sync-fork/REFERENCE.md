@@ -69,6 +69,7 @@ comment templates, so drift is usually silent rather than harmful — but check
 | File | What is changed | Why |
 | --- | --- | --- |
 | `omarchy-theme-bg-switcher` | adds `"$HOME/Pictures/wallpapers"` to the `omarchy-menu-images` directory list | Surface personal wallpapers in the background switcher. **Shadows `bin/omarchy-theme-bg-switcher` on PATH**, so upstream changes to that script never reach it. Re-check after every merge. |
+| `omarchy-launch-files`, `omarchy-launch-files-cwd` | run `nautilus --new-window` instead of `folio` | User kept Nautilus over upstream's Folio. Hyprland's PATH puts `/usr/share/omarchy/bin` first, so the shadows only win in terminals — `bindings.lua` calls them by absolute `~/.local/bin` path for `SUPER + F` and `SUPER + ALT + SHIFT + F`. Re-check after every merge. |
 
 ### Fork-only, no upstream counterpart
 
@@ -96,6 +97,7 @@ Replaced upstream defaults (each preceded by `hl.unbind`):
 | `SUPER + SHIFT + W` | Omawrite | Wallpaper effects (`UserScripts/WallpaperEffects.sh`) |
 | `SUPER + F` | Full screen | File manager (Nautilus, deliberately kept — see below) |
 | `SUPER + SHIFT + F` | File manager | Full screen |
+| `SUPER + ALT + SHIFT + F` | File manager (cwd), Folio | File manager (cwd), Nautilus via the `~/.local/bin` shadow |
 | `SUPER + SHIFT + B` | Browser | Browser (private) |
 | `SUPER + SHIFT + A` | ChatGPT | Grok |
 | `SUPER + SHIFT + X` | X | X Post |
@@ -135,8 +137,11 @@ Resolved:
   `3f974d011`. The user tried Folio, Dolphin and COSMIC Files and chose to
   stay on Nautilus: package reinstalled explicitly (`omarchy-pkg-add nautilus`),
   so the one-shot migration will not remove it again. `SUPER + F` runs
-  `nautilus --new-window`, `inode/directory` in `~/.config/mimeapps.list` is
-  back to `org.gnome.Nautilus.desktop`. Standing deviation: upstream
+  `nautilus --new-window` (through the shadowed `omarchy-launch-files`),
+  `inode/directory` and `application/zip` in `~/.config/mimeapps.list` point at
+  `org.gnome.Nautilus.desktop`, and the dock pin is `org.gnome.Nautilus`
+  (`omarchy dock pinned`, in the untracked `~/.config/omarchy/shell.json`).
+  The Dropbox panel still opens files with a hardcoded `folio`. Standing deviation: upstream
   file-manager integration (dispatcher, previews, sharing) now targets Folio
   and will not flow to Nautilus; future migrations touching Nautilus need a
   manual check.

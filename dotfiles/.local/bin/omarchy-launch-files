@@ -1,0 +1,6 @@
+#!/bin/bash
+
+# omarchy:summary=Launch Files
+# Fork shadow: the user kept Nautilus over upstream's Folio (see fork/sync-fork/REFERENCE.md).
+
+exec setsid uwsm-app -- nautilus --new-window "$@"

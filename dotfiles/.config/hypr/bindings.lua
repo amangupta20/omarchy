@@ -35,7 +35,9 @@ o.bind("SUPER + SHIFT + W", "Wallpaper effects", os.getenv("HOME") .. "/.config/
 
 -- Applications
 -- File manager on SUPER + F, Fullscreen on SUPER + SHIFT + F
-o.bind("SUPER + F", "File manager", "uwsm app -- nautilus --new-window")
+o.bind("SUPER + F", "File manager", os.getenv("HOME") .. "/.local/bin/omarchy-launch-files")
+hl.unbind("SUPER + ALT + SHIFT + F")
+o.bind("SUPER + ALT + SHIFT + F", "File manager (cwd)", os.getenv("HOME") .. "/.local/bin/omarchy-launch-files-cwd")
 o.bind("SUPER + SHIFT + F", "Full screen", hl.dsp.window.fullscreen({ mode = "fullscreen" }))
 
 -- Browser (Zen is the xdg default; omarchy-launch-browser follows it)
