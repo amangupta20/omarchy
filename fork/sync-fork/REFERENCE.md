@@ -83,6 +83,7 @@ These cannot drift, but they can break against removed upstream commands.
 | `.config/fastfetch/` | fetch configs |
 | `.config/quickshell/` | JaKooLit overview/search shell, launched by `autostart.lua`; provides the `quickshell:overviewToggle` global shortcut |
 | `.config/hypr/UserScripts/` | JaKooLit wallpaper/rofi helper scripts, called from `bindings.lua` |
+| `.config/omarchy/hooks/theme-set.d/20-yaru-icons` | theme-set hook that puts back each theme's pre-`72922629a` Yaru icon colour (Catppuccin → `Yaru-purple`) after `omarchy-theme-set-gnome` resets icons to Adwaita | User prefers the old Yaru folders in Nautilus; needs `yaru-icon-theme` (installed explicitly 2026-11-15), keeps Adwaita if it is missing. GTK only — Qt apps stay on Adwaita |
 | `.local/bin/acer-fan-curve` + `.config/systemd/user/acer-fan-curve.service` | temperature-driven fan curve for the Acer Nitro AN515-58 via `linuwu_sense` | EC holds fans low while CPU hits 90s; polls temps (no change signal exists), drives both fans from hotter of CPU/dGPU, restores EC auto on exit |
 
 ### Keybinding map

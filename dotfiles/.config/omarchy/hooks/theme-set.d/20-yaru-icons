@@ -1,0 +1,21 @@
+#!/bin/bash
+# Give GTK apps the Yaru icon colour each theme used before upstream moved every
+# theme to Adwaita (72922629a). Runs after omarchy-theme-set-gnome resets the icons.
+# Needs yaru-icon-theme; without it, Adwaita stays.
+
+case "${1:-}" in
+  catppuccin | last-horizon | lupine) icons=Yaru-purple ;;
+  everforest | jade-horse) icons=Yaru-sage ;;
+  solitude) icons=Yaru-sage-dark ;;
+  gruvbox) icons=Yaru-olive ;;
+  matte-black) icons=Yaru-red ;;
+  miasma | retro-82) icons=Yaru-wartybrown ;;
+  ristretto) icons=Yaru-yellow ;;
+  tokyo-night) icons=Yaru-magenta ;;
+  vantablack | white) icons=Yaru ;;
+  *) icons=Yaru-blue ;;
+esac
+
+if [[ -f /usr/share/icons/$icons/index.theme ]]; then
+  gsettings set org.gnome.desktop.interface icon-theme "$icons"
+fi
