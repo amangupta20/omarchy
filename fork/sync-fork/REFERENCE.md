@@ -86,6 +86,17 @@ These cannot drift, but they can break against removed upstream commands.
 | `.config/omarchy/hooks/theme-set.d/20-yaru-icons` | theme-set hook that puts back each theme's pre-`72922629a` Yaru icon colour (Catppuccin → `Yaru-purple`) after `omarchy-theme-set-gnome` resets icons to Adwaita | User prefers the old Yaru folders in Nautilus; needs `yaru-icon-theme` (installed explicitly 2026-11-15), keeps Adwaita if it is missing. GTK only — Qt apps stay on Adwaita |
 | `.local/bin/acer-fan-curve` + `.config/systemd/user/acer-fan-curve.service` | temperature-driven fan curve for the Acer Nitro AN515-58 via `linuwu_sense` | EC holds fans low while CPU hits 90s; polls temps (no change signal exists), drives both fans from hotter of CPU/dGPU, restores EC auto on exit |
 
+### Packages upstream removed that the fork needs
+
+Upstream dropped these. Their removal migrations (`1794330979` Nautilus, `1794397144` Yaru) already ran here and are one-shot, so the explicitly reinstalled packages stay. A fresh Omarchy install never gets them; install them before stowing:
+
+```bash
+omarchy-pkg-add nautilus yaru-icon-theme
+```
+
+- `nautilus`: the file manager behind the shadowed `omarchy-launch-files(-cwd)`.
+- `yaru-icon-theme`: icons for the `20-yaru-icons` theme-set hook. It covers native GTK apps (Nautilus, Papers, Disks, gedit, Mission Center, Celluloid, Clapper, Pinta, Remmina, Seahorse, Lutris, Xournal++, GParted, Tsukimi, nwg-displays) and the GTK file picker in browsers and Electron apps.
+
 ### Keybinding map
 
 Replaced upstream defaults (each preceded by `hl.unbind`):
